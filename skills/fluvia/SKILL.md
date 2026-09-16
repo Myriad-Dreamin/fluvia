@@ -41,7 +41,9 @@ and a zero-arg call may drop its parentheses (`list`, `vars`).
 
 Call `seq = n` binds `<out><n>` (value channel) and `err<n>` (error channel).
 `prepareKernel` declares `out: "kernel"`, so seq 0 binds `kernel0` and `err0`;
-the acknowledgement names both. **Exactly one of the two ever becomes `ready`;
+the acknowledgement names both. **Read the names off the acknowledgement** —
+never assume the suffix. When the runtime is shared (several agents, or a
+`fluvia serve` others connect to), your first call may well be `c7 ⇒ kernel7`. **Exactly one of the two ever becomes `ready`;
 the other becomes `void`.** Success fills the value handle and voids the error
 handle, failure does the reverse, cancelling and skipping void both.
 

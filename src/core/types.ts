@@ -59,6 +59,8 @@ export interface HandleRecord {
   kind: ChannelKind
   /** The call that produces it. */
   call: string
+  /** The agent whose namespace it is bound in; see `HandleScope`. */
+  owner: string
   /** `pending` until the producing call settles, then `ready` (carries data) or `void` (never will). */
   state: 'pending' | 'ready' | 'void'
   /** Short type label for display, e.g. `Kernel`. */

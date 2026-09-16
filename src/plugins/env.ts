@@ -2,11 +2,18 @@
  * The environment is the agent-visible namespace: variable name → handle, plus
  * the roster of agents that have spoken this session.
  *
- * Bindings are **shared across agents in one runtime**, which is deliberate:
- * `@planner` can submit `prepareKernel(...)` and `@tuner` can immediately
- * `benchmark(kernel0, ...)`. Handing several agents one dataflow graph is the
- * point of multiplexing them over a single CLI, and it is how a dsh subagent
- * picks up work its parent started.
+ * Whether bindings are shared depends on who the agents are, so the namespace
+ * has a **scope**:
+ *
+ * - `runtime` — one namespace for everyone. `@planner` submits
+ *   `prepareKernel(...)` and `@tuner` immediately passes `kernel0` onward.
+ *   Handing several agents one dataflow graph is the point of multiplexing them
+ *   over a single CLI, and it is right when one operator drives all of them.
+ * - `agent` — a namespace per agent. Required as soon as the agents are
+ *   mutually untrusted, because a handle is a capability: passing someone
+ *   else's handle runs an implementation over their payload and returns a
+ *   digest of it. A server that accepts connections (`fluvia serve`) therefore
+ *   defaults to `agent`, and sharing has to be arranged deliberately.
  *
  * @module fluvia/plugins/env
  */
@@ -21,18 +28,42 @@ declare module '@deepseek-ai/cordis' {
   }
 }
 
+/** How widely a bound handle name is visible. See the module doc. */
+export type HandleScope = 'runtime' | 'agent'
+
+/** Environment configuration, supplied by whichever entry point composes it. */
+export interface EnvironmentConfig {
+  /** The session tracer. */
+  tracer: Tracer
+  /** Namespace scope; `runtime` keeps the single-operator behaviour. */
+  scope?: HandleScope
+}
+
 export class Environment extends Service {
+  /** Keyed by `scopeKey(owner) + name`, so one map serves both scopes. */
   private readonly byName = new Map<string, HandleRecord>()
   private readonly byId = new Map<string, HandleRecord>()
   private readonly values = new Map<string, unknown>()
   private readonly agentMap = new Map<string, AgentRecord>()
   private nextHandle = 0
 
-  constructor(
-    ctx: Context,
-    private readonly tracer: Tracer,
-  ) {
+  private readonly tracer: Tracer
+
+  /** The namespace scope in force. */
+  readonly scope: HandleScope
+
+  constructor(ctx: Context, config: EnvironmentConfig) {
     super(ctx, 'env')
+    this.tracer = config.tracer
+    this.scope = config.scope ?? 'runtime'
+  }
+
+  /**
+   * Namespace prefix for an owner. Under `runtime` scope every owner collapses
+   * to the same namespace, which is what makes the two scopes one code path.
+   */
+  private key(owner: string, name: string): string {
+    return this.scope === 'agent' ? `${owner}\u0000${name}` : name
   }
 
   /**
@@ -41,21 +72,27 @@ export class Environment extends Service {
    * @param name — the agent-visible variable, e.g. `kernel0` or `err0`.
    * @param kind — which channel of `call` it carries.
    */
-  bind(name: string, kind: ChannelKind, call: string): HandleRecord {
+  bind(name: string, kind: ChannelKind, call: string, owner: string): HandleRecord {
     // Names are unique by construction (`<out><seq>`), except for a toolbox
     // that declares `out: "err"`, which would collide with its own error
     // channel. Rebinding a live name would silently steal a dependency, so the
     // colliding one is suffixed and the acknowledgement reports what was bound.
-    while (this.byName.has(name)) name = `${name}_`
-    const handle: HandleRecord = { id: `h${this.nextHandle++}`, name, kind, call, state: 'pending' }
-    this.byName.set(name, handle)
+    while (this.byName.has(this.key(owner, name))) name = `${name}_`
+    const handle: HandleRecord = { id: `h${this.nextHandle++}`, name, kind, call, state: 'pending', owner }
+    this.byName.set(this.key(owner, name), handle)
     this.byId.set(handle.id, handle)
     return handle
   }
 
-  /** Resolve a variable name an agent wrote. */
-  lookup(name: string): HandleRecord | undefined {
-    return this.byName.get(name)
+  /**
+   * Resolve a variable name an agent wrote.
+   *
+   * @param owner — the agent doing the lookup. Under `agent` scope a name
+   * resolves only inside that agent's namespace, so one agent cannot name
+   * another's handle at all.
+   */
+  lookup(name: string, owner: string): HandleRecord | undefined {
+    return this.byName.get(this.key(owner, name))
   }
 
   /** Resolve a handle id. */
@@ -63,9 +100,15 @@ export class Environment extends Service {
     return this.byId.get(id)
   }
 
-  /** Every handle, in creation order. */
-  handles(): HandleRecord[] {
-    return [...this.byId.values()]
+  /**
+   * Every handle, in creation order.
+   *
+   * @param owner — when given, only handles that agent may name.
+   */
+  handles(owner?: string): HandleRecord[] {
+    const all = [...this.byId.values()]
+    if (owner === undefined || this.scope === 'runtime') return all
+    return all.filter((handle) => handle.owner === owner)
   }
 
   /**

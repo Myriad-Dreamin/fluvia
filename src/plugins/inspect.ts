@@ -9,6 +9,13 @@
  * respect only: `kind: 'control'` means they answer synchronously and bind no
  * handles, because an answer you have to wait for is useless for triage.
  *
+ * Visibility follows the handle scope (`Environment.scope`) rather than a
+ * separate switch, because it is the same question: under `runtime` scope one
+ * operator drives every agent and sees everything, while under `agent` scope
+ * the agents are mutually untrusted, so a caller inspects and cancels only its
+ * own calls. Inspection that crossed that line would leak both the shape of
+ * another agent's work and digests of its payloads.
+ *
  * @module fluvia/plugins/inspect
  */
 
@@ -35,7 +42,7 @@ export function controlFunctions(ctx: Context): FunctionDef[] {
       summary: 'Show calls that have not settled yet; `list("all")` includes finished ones.',
       params: '(scope?)',
       positional: ['scope'],
-      run: (args: { scope?: string }) => listCalls(ctx, args.scope ?? 'live'),
+      run: (args: { scope?: string }, cx) => listCalls(ctx, cx.agent, args.scope ?? 'live'),
     },
     {
       name: 'cancel',
@@ -53,7 +60,7 @@ export function controlFunctions(ctx: Context): FunctionDef[] {
       summary: 'Analyse the session, one call (`inspect(c3)`) or one agent (`inspect(@tuner)`).',
       params: '(target?)',
       positional: ['target'],
-      run: (args: { target?: string }) => inspectTarget(ctx, args.target),
+      run: (args: { target?: string }, cx) => inspectTarget(ctx, cx.agent, args.target),
     },
     {
       name: 'vars',
@@ -61,7 +68,7 @@ export function controlFunctions(ctx: Context): FunctionDef[] {
       kind: 'control',
       summary: 'List bound handles with their states and payload summaries.',
       params: '()',
-      run: () => listVars(ctx),
+      run: (_args, cx) => listVars(ctx, cx.agent),
     },
     {
       name: 'defs',
@@ -82,10 +89,24 @@ export function controlFunctions(ctx: Context): FunctionDef[] {
   ]
 }
 
+/**
+ * True when the caller may see another agent's work — i.e. when the runtime is
+ * driven by one operator rather than shared by untrusted agents.
+ */
+function seesEveryAgent(ctx: Context): boolean {
+  return ctx.env.scope === 'runtime'
+}
+
+/** Calls the caller is allowed to see. */
+function visibleCalls(ctx: Context, caller: string): CallRecord[] {
+  const calls = ctx.calls.list()
+  return seesEveryAgent(ctx) ? calls : calls.filter((call) => call.agent === caller)
+}
+
 /** `list()` — the triage view. */
-function listCalls(ctx: Context, scope: string): ControlResult {
+function listCalls(ctx: Context, caller: string, scope: string): ControlResult {
   const all = scope === 'all' || scope === 'done'
-  const calls = ctx.calls.list().filter((call) => (all ? true : !isTerminal(call.state)))
+  const calls = visibleCalls(ctx, caller).filter((call) => (all ? true : !isTerminal(call.state)))
   if (!calls.length) {
     return { text: all ? 'no calls yet' : 'nothing in flight', rows: [] }
   }
@@ -121,6 +142,12 @@ function blockedOn(ctx: Context, call: CallRecord): string {
 /** `cancel(c5)`. */
 function cancelCall(ctx: Context, id: string | undefined, agent: string): ControlResult {
   if (!id) return { text: 'cancel(id) needs a call id, e.g. cancel(c5)' }
+  const target = ctx.calls.get(id)
+  if (target && !seesEveryAgent(ctx) && target.agent !== agent) {
+    // Refuse without confirming it exists: "not yours" and "not a call" have to
+    // read the same, or cancel() becomes a probe for other agents' call ids.
+    return { text: `unknown call: ${id}` }
+  }
   const result = ctx.calls.cancel(id, agent)
   return {
     text: result.ok ? `${id} cancelled; dependents will be skipped` : `${id} already ${result.state}, nothing to cancel`,
@@ -129,12 +156,22 @@ function cancelCall(ctx: Context, id: string | undefined, agent: string): Contro
 }
 
 /** `inspect()` / `inspect(c3)` / `inspect(@tuner)` / `inspect(kernel0)`. */
-function inspectTarget(ctx: Context, target?: string): ControlResult {
-  if (!target) return inspectSession(ctx)
-  if (target.startsWith('@')) return inspectAgent(ctx, target.slice(1))
-  const call = ctx.calls.get(target) ?? ctx.calls.get(ctx.env.lookup(target)?.call ?? '')
-  if (call) return inspectCall(ctx, call)
-  if (ctx.env.agents().some((agent) => agent.id === target)) return inspectAgent(ctx, target)
+function inspectTarget(ctx: Context, caller: string, target?: string): ControlResult {
+  if (!target) return inspectSession(ctx, caller)
+  const named = target.startsWith('@') ? target.slice(1) : target
+  if (target.startsWith('@')) {
+    if (!seesEveryAgent(ctx) && named !== caller) return { text: `unknown agent: @${named}` }
+    return inspectAgent(ctx, named)
+  }
+  const call = ctx.calls.get(target) ?? ctx.calls.get(ctx.env.lookup(target, caller)?.call ?? '')
+  if (call) {
+    if (!seesEveryAgent(ctx) && call.agent !== caller) return { text: `unknown target: ${target}` }
+    return inspectCall(ctx, call)
+  }
+  if (ctx.env.agents().some((agent) => agent.id === named)) {
+    if (!seesEveryAgent(ctx) && named !== caller) return { text: `unknown target: ${target}` }
+    return inspectAgent(ctx, named)
+  }
   return { text: `unknown target: ${target}. Try a call id (c3), a handle (kernel0) or an agent (@tuner).` }
 }
 
@@ -220,8 +257,8 @@ function inspectAgent(ctx: Context, id: string): ControlResult {
 }
 
 /** Whole-session analysis, including how parallel the session actually was. */
-function inspectSession(ctx: Context): ControlResult {
-  const calls = ctx.calls.list()
+function inspectSession(ctx: Context, caller: string): ControlResult {
+  const calls = visibleCalls(ctx, caller)
   const now = ctx.calls.now()
   const busy = calls.reduce(
     (total, call) => total + (call.at.start === undefined ? 0 : (call.at.settle ?? now) - call.at.start),
@@ -235,7 +272,8 @@ function inspectSession(ctx: Context): ControlResult {
     `  busy ${ms(busy)} over ${ms(now)} wall → mean parallelism ${(busy / Math.max(now, 1)).toFixed(2)} of ${ctx.calls.concurrency}`,
     `  notifications: ${ctx.notify.history.length} emitted, ${ctx.notify.deliveries.length} deliveries`,
   ]
-  const rows = ctx.env.agents().map((agent) => {
+  const roster = seesEveryAgent(ctx) ? ctx.env.agents() : ctx.env.agents().filter((agent) => agent.id === caller)
+  const rows = roster.map((agent) => {
     const owned = calls.filter((call) => call.agent === agent.id)
     const totals = owned.filter((call) => call.at.settle !== undefined).map((call) => call.at.settle! - call.at.submit)
     return [agent.id, owned.length, owned.filter((call) => !isTerminal(call.state)).length, ms(percentile(totals, 0.5)), ms(percentile(totals, 0.95)), renderOutcomes(owned)]
@@ -244,9 +282,9 @@ function inspectSession(ctx: Context): ControlResult {
   return { text: lines.join('\n'), rows }
 }
 
-/** `vars()` — the handle namespace, which is shared by every agent. */
-function listVars(ctx: Context): ControlResult {
-  const handles = ctx.env.handles()
+/** `vars()` — the handle names this caller can use. */
+function listVars(ctx: Context, caller: string): ControlResult {
+  const handles = ctx.env.handles(caller)
   if (!handles.length) return { text: 'no handles bound yet', rows: [] }
   const rows = handles.map((handle) => [
     handle.name,

@@ -117,10 +117,10 @@ export class Scheduler extends Service {
     const seq = this.seq++
     const id = `c${seq}`
     const deps: DepRef[] = []
-    const args = parsed.args.map((arg) => this.resolveRefs(arg, deps))
+    const args = parsed.args.map((arg) => this.resolveRefs(arg, deps, agent))
 
-    const value = this.ctx.env.bind(`${def.out}${seq}`, 'value', id)
-    const error = this.ctx.env.bind(`err${seq}`, 'error', id)
+    const value = this.ctx.env.bind(`${def.out}${seq}`, 'value', id, agent)
+    const error = this.ctx.env.bind(`err${seq}`, 'error', id, agent)
     const record: CallRecord = {
       id,
       seq,
@@ -199,12 +199,12 @@ export class Scheduler extends Service {
   /* ----------------------------------------------------------- internals */
 
   /** Rewrite a parsed argument, recording a dependency for each handle name. */
-  private resolveRefs(arg: RawArg, deps: DepRef[]): ArgNode {
+  private resolveRefs(arg: RawArg, deps: DepRef[], owner: string): ArgNode {
     switch (arg.n) {
       case 'lit':
         return arg
       case 'ref': {
-        const handle = this.ctx.env.lookup(arg.name)
+        const handle = this.ctx.env.lookup(arg.name, owner)
         if (!handle) {
           throw new SubmitError(
             `unknown handle: ${arg.name}. Handles are bound by earlier calls; \`vars\` lists the live ones.`,
@@ -214,9 +214,12 @@ export class Scheduler extends Service {
         return { n: 'ref', name: arg.name, handle: handle.id }
       }
       case 'arr':
-        return { n: 'arr', items: arg.items.map((item) => this.resolveRefs(item, deps)) }
+        return { n: 'arr', items: arg.items.map((item) => this.resolveRefs(item, deps, owner)) }
       case 'obj':
-        return { n: 'obj', props: arg.props.map((prop) => ({ key: prop.key, value: this.resolveRefs(prop.value, deps) })) }
+        return {
+          n: 'obj',
+          props: arg.props.map((prop) => ({ key: prop.key, value: this.resolveRefs(prop.value, deps, owner) })),
+        }
     }
   }
 

@@ -61,7 +61,7 @@ const concurrency = Math.max(1, Number(values.concurrency) || 4)
 
 const ctx = new Context()
 await ctx.plugin(FunctionRegistry)
-await ctx.plugin(Environment, tracer)
+await ctx.plugin(Environment, { tracer })
 await ctx.plugin(NotifyHub, tracer)
 await ctx.plugin(Scheduler, { tracer, concurrency })
 // Services appear when their fiber starts, which is a microtask after plugin();

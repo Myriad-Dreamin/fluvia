@@ -50,7 +50,23 @@ reason — `upstream_failed`, `upstream_ok`, `upstream_cancelled` or
 `upstream_skipped` — and its own handles turn void in turn. Skips cascade, so a
 failed root never leaves dangling work and the agent never cleans up by hand.
 
-Full contract: **[docs/PROTOCOL.md](docs/PROTOCOL.md)**.
+**Two deployments.** `fluvia cli` gives one trusted operator the whole runtime.
+`fluvia serve` puts the runtime — the instruction set, the scheduler and the
+trace — on the far side of a trust boundary from the model that drives it: the
+sandboxed side may submit lines and read its own results, and nothing else. The
+second shape is the one that matters when the model can rewrite everything
+around it.
+
+```sh
+# outside the sandbox: the instruction set and the work
+pnpm serve --listen unix:/run/fluvia.sock --preload src/toolbox/default.ts --trace out/serve.jsonl.gz
+# inside it: a client that can only ask
+pnpm connect --connect unix:/run/fluvia.sock --label planner
+```
+
+Full contract: **[docs/PROTOCOL.md](docs/PROTOCOL.md)**. What the boundary is
+worth, and what it is not: **[docs/THREAT-MODEL.md](docs/THREAT-MODEL.md)**
+(`pnpm test:boundary` checks each property as an attempted attack).
 
 ## Quickstart
 
@@ -170,6 +186,8 @@ so the perf report always has a readable transcript alongside the timings.
 
 | directory | concern |
 | --- | --- |
+| `src/server/` | `pnpm serve`: the runtime on the far side of the boundary — wire protocol, per-connection identity, admission and limits |
+| `src/client/` | `pnpm connect`: the thin, untrusted client and its REPL |
 | `src/core/` | the contract everything agrees on: `types.ts` (call, handle, notification, trace), `parser.ts` (one line → one call), `describe.ts` (values → type + summary), `trace.ts` (gzip JSONL writer and reader) |
 | `src/plugins/` | one cordis plugin per concern: `registry` (loaded functions), `env` (handle bindings, shared by every agent in the runtime), `scheduler` (dependency resolution, concurrency, cancellation, skip cascade), `notify` (the hub), `notify-dsh` (the dsh handler), `inspect` (the control calls) |
 | `src/cli/` | the agent-facing surface: `bin.ts` (composition and flags), `session.ts` (the read–submit–answer loop), `format.ts` (every string an agent reads), `sinks.ts` (`--notify` wiring) |

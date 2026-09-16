@@ -9,10 +9,13 @@
   },
   "scripts": {
     "cli": "tsx src/cli/bin.ts",
+    "serve": "tsx src/server/bin.ts",
+    "connect": "tsx src/client/bin.ts",
     "demo": "tsx src/demo/run.ts",
     "demo-perf": "tsx src/perf/bin.ts",
     "dsh-inbox": "tsx src/dsh-inbox/bin.ts",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test:boundary": "tsx test/boundary.ts"
   },
   "dependencies": {
     "@deepseek-ai/cordis": "^4.0.2",

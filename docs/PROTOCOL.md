@@ -77,7 +77,36 @@ Control calls answer synchronously and bind no handles.
 | `vars()` | bound handles and their states |
 | `help()` | usage |
 
-## 4. CLI
+## 4. Two deployments
+
+fluvia runs in one of two shapes, and they share every line of the dispatch
+path (`src/core/dispatch.ts`) so that what a line means never depends on which
+one you chose.
+
+**One trusted operator** — `fluvia cli`. The terminal owns the runtime, loads
+the toolbox and drives every agent; an `@agent` prefix selects which one. This
+is what `pnpm demo` exercises.
+
+**A model in a sandbox** — `fluvia serve` outside it, a client inside. The
+runtime, the instruction set and the trace live where the model cannot reach
+them; the client may submit lines and read its own results, and nothing else.
+Identity is assigned by the server, handles are namespaced per agent, and the
+limits are the server's. See **[THREAT-MODEL.md](THREAT-MODEL.md)**, and
+`pnpm test:boundary` for the enforcement checked as attacks.
+
+```
+fluvia serve --listen unix:/run/fluvia.sock --preload ./toolbox.ts \
+             --concurrency 4 --trace out/serve.jsonl.gz [--token-file f]
+fluvia connect --connect unix:/run/fluvia.sock --label planner
+```
+
+Wire: NDJSON both ways, `src/server/protocol.ts`. Client frames are `hello`,
+`submit` and `bye`; server frames are `welcome` (assigned agent, session, the
+published ISA, the limits), `ack`, `control`, `error`, `result` and `bye`. A
+`submit` carries an `id` the answer echoes, so a notification arriving mid-flight
+can never be mistaken for an answer.
+
+## 5. CLI
 
 ```
 tsx src/cli/bin.ts [options]
@@ -113,7 +142,7 @@ Human mode prints the same information as terminal text. **Either way the
 trace records the human rendering**, so the perf report always has a readable
 transcript.
 
-## 5. Notifications
+## 6. Notifications
 
 A `Notification` (see `src/core/types.ts`) is produced for every terminal call
 and handed to every registered sink. Sinks are cordis plugins that call
@@ -124,7 +153,7 @@ that land within a short window into one envelope, so an agent turn is
 interrupted once rather than five times, and renders them in dsh's
 notification dialect.
 
-## 6. Trace
+## 7. Trace
 
 `out/<session>.jsonl.gz` — gzip JSONL, one event per line, schema in
 `src/core/types.ts` (`TraceEvent`). First line is always `session.start` with
@@ -144,7 +173,7 @@ An agent id is always a lane that authored something. `cli.output` and
 coalesced batch spanning several agents; `.exit` is session control and enrols
 nobody.
 
-## 7. Deliverables
+## 8. Deliverables
 
 - `pnpm demo` — drives the CLI as a scripted pair of agents and writes
   `out/<session>.jsonl.gz`.
