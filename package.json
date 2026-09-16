@@ -1,0 +1,31 @@
+{
+  "name": "fluvia",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Fully-async dataflow CLI: JS-syntax calls, resource handles, and completion notifications for LLM agents",
+  "type": "module",
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "scripts": {
+    "cli": "tsx src/cli/bin.ts",
+    "demo": "tsx src/demo/run.ts",
+    "demo-perf": "tsx src/perf/bin.ts",
+    "dsh-inbox": "tsx src/dsh-inbox/bin.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@deepseek-ai/cordis": "^4.0.2",
+    "acorn": "^8.14.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  }
+}
