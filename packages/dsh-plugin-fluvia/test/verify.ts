@@ -15,28 +15,30 @@
  */
 
 import { strict as assert } from 'node:assert'
-import { existsSync } from 'node:fs'
-import { join } from 'node:path'
 import type { UserMessage } from '@deepseek-ai/dsh-llm'
 // Imported through the package's own name, not by relative path: that exercises
 // the published `exports` map and the built `lib/` this plugin actually ships,
 // so a broken manifest fails here rather than inside somebody's harness.
 import {
   Courier,
-  defaultCliArgs,
+  buildEnvelope,
   fluviaAgentId,
-  fluviaRepoRoot,
   matchesSession,
-  notifyUrlFor,
+  parseAddress,
   parseEnvelope,
   renderAnswer,
+  renderDescription,
+  renderLineDescription,
+  sanitizeAgentLabel,
   startReceiver,
   stripAgentPrefix,
   summarizeEnvelope,
   type AgentSource,
-  type CliAnswer,
+  type Answer,
   type CourierLog,
+  type IsaEntry,
   type TargetAgent,
+  type WireNotification,
 } from 'dsh-plugin-fluvia'
 
 /** Lines the courier and receiver logged, so a test can assert on reporting too. */
@@ -151,6 +153,7 @@ async function main(): Promise<void> {
     queueLimit: 200,
     courier,
     log,
+    acceptPosts: true,
   })
   const base = `http://127.0.0.1:${receiver.port}`
   ok(`receiver bound an ephemeral port (${receiver.port})`)
@@ -357,8 +360,8 @@ async function main(): Promise<void> {
 
     /* --------------------------------------------- 6. tool rendering and CLI args */
 
-    const ack: CliAnswer = {
-      type: 'ack', call: 'c0', fn: 'prepareKernel', agent: 'dsh-s1',
+    const ack: Answer = {
+      t: 'ack', call: 'c0', fn: 'prepareKernel',
       bind: { value: 'kernel0', error: 'err0' }, deps: [], state: 'running',
     }
     const acked = renderAnswer(ack)
@@ -372,20 +375,20 @@ async function main(): Promise<void> {
     ok('an ack renders the call id, both handles, the state and what to do next')
 
     const waiting = renderAnswer({
-      type: 'ack', call: 'c1', fn: 'compileKernel', agent: 'dsh-s1',
+      t: 'ack', call: 'c1', fn: 'compileKernel',
       bind: { value: 'kernel1', error: 'err1' },
       deps: [{ name: 'kernel0', from: 'c0', kind: 'value' }], state: 'waiting',
     })
     assert.match(waiting.text, /\[waiting on kernel0\]/, 'a waiting call names the handle it is parked on')
     ok('a waiting ack names its blocking handle')
 
-    const control = renderAnswer({ type: 'control', fn: 'list', agent: 'dsh-s1', text: 'call  agent\nc0    dsh-s1' })
+    const control = renderAnswer({ t: 'control', fn: 'list', text: 'call  agent\nc0    dsh-s1', rows: [] })
     assert.equal(control.kind, 'control')
     assert.equal(control.text, 'call  agent\nc0    dsh-s1', 'control text is returned verbatim')
     ok('a control answer is returned verbatim')
 
     const rejected = renderAnswer({
-      type: 'error', agent: 'dsh-s1',
+      t: 'error',
       message: 'the CLI does not evaluate expressions: pass a literal or a handle',
       line: 'compileKernel(kernel0, { opt: 1 + 2 })',
     })
@@ -394,29 +397,93 @@ async function main(): Promise<void> {
     assert.match(rejected.text, /one plain call per line/, 'a rejection carries the syntax reminder')
     ok('a rejected line returns the parse error verbatim plus the syntax rule')
 
-    const args = defaultCliArgs(
-      { enabled: true, cwd: '/repo', command: 'node', args: [], concurrency: 4, preload: 'src/toolbox/default.ts', trace: 'out/t.jsonl.gz' },
-      'http://127.0.0.1:7788/inbox',
-    )
-    assert.deepEqual(args, [
-      '--import', 'tsx', 'src/cli/bin.ts', '--json',
-      '--concurrency', '4',
-      '--preload', 'src/toolbox/default.ts',
-      '--trace', 'out/t.jsonl.gz',
-      '--notify', 'dsh:http://127.0.0.1:7788/inbox',
-      '--notify', 'stdout',
-    ])
-    ok('the default CLI argv is the documented one')
+    /* ------------------------------- 7. the tool learns the ISA from the host */
 
-    // A wildcard bind is an address to listen on, not one to connect to.
-    assert.equal(notifyUrlFor('0.0.0.0', 7788, '/inbox'), 'http://127.0.0.1:7788/inbox')
-    assert.equal(notifyUrlFor('127.0.0.1', 7788, '/inbox'), 'http://127.0.0.1:7788/inbox')
-    ok('the child is pointed at a reachable address, never a wildcard')
+    const isa: IsaEntry[] = [
+      { name: 'prepareKernel', kind: 'async', out: 'kernel', params: '({ size, dtype })', summary: 'Build a kernel descriptor.' },
+      { name: 'weldFlange', kind: 'async', out: 'flange', params: '({ bore })', summary: 'A host-only instruction this package never heard of.' },
+      { name: 'list', kind: 'control', out: '', params: '()', summary: 'Calls in flight.' },
+    ]
+    const description = renderDescription(isa)
+    // The point of building the description from `welcome.isa`: an instruction
+    // this package has never heard of still reaches the model.
+    assert.match(description, /weldFlange\(\{ bore \}\) → flangeN, errN — A host-only instruction/)
+    assert.match(description, /Instructions loaded by the host \(2\)/)
+    assert.match(description, /Control instructions .*: list\./)
+    assert.match(description, /cannot add to it, change it, or reach the implementations/)
+    assert.match(description, /never block/i)
+    assert.match(description, /TWO handles/)
+    ok('the tool description is built from the runtime\u2019s published instruction set')
 
-    // The repo root is derived from the installed location, never hardcoded.
-    const root = fluviaRepoRoot()
-    assert.ok(existsSync(join(root, 'src', 'cli', 'bin.ts')), `repo root must contain src/cli/bin.ts, got ${root}`)
-    ok(`the fluvia repo root resolves from the plugin's own location (${root})`)
+    const empty = renderDescription([])
+    assert.doesNotMatch(empty, /Instructions loaded by the host/, 'an empty ISA lists nothing rather than inventing')
+    assert.match(empty, /never block/i, 'but the grammar and handle rules are still taught')
+    ok('an empty instruction set degrades to the grammar alone')
+
+    assert.match(renderLineDescription(isa), /prepareKernel\(\{ size, dtype \}\)/, 'the example comes from the real ISA')
+    assert.match(renderLineDescription(isa), /Do NOT write an `@agent` prefix/)
+    ok('the line parameter tells the model not to write an @agent prefix')
+
+    /* ------------------------------------------- 8. address parsing and render */
+
+    assert.deepEqual(parseAddress('unix:/tmp/fluvia.sock'), { kind: 'unix', path: '/tmp/fluvia.sock' })
+    assert.deepEqual(parseAddress('/run/f.sock'), { kind: 'unix', path: '/run/f.sock' })
+    assert.deepEqual(parseAddress('tcp:127.0.0.1:7790'), { kind: 'tcp', host: '127.0.0.1', port: 7790 })
+    assert.throws(() => parseAddress('nonsense'), /expected unix:/)
+    assert.throws(() => parseAddress('tcp:127.0.0.1:0'), /bad port/)
+    ok('addresses parse the same way the runtime parses them')
+
+    assert.equal(sanitizeAgentLabel('8c8f-abc'), 'a-8c8f-abc', 'a digit-initial label is made legal')
+    assert.equal(sanitizeAgentLabel('weird id/x'), 'weird-id-x')
+    ok('labels are sanitized into fluvia\u2019s agent grammar before being requested')
+
+    // The rendered block is the model-facing contract, so it is asserted whole.
+    const settled: WireNotification[] = [
+      {
+        id: 'n0', at: 100, agent: 'dsh-s1', call: 'c0', fn: 'prepareKernel', outcome: 'done',
+        bind: { value: 'kernel0', error: 'err0' },
+        ready: { name: 'kernel0', kind: 'value', type: 'Kernel', summary: '4096x4096 f32' },
+        timing: { waitedMs: 0, runMs: 450, totalMs: 450 }, unblocked: ['c1'], text: '',
+      },
+      {
+        id: 'n1', at: 120, agent: 'dsh-s1', call: 'c9', fn: 'flakyProbe', outcome: 'failed',
+        bind: { value: 'probe9', error: 'err9' },
+        ready: { name: 'err9', kind: 'error' },
+        error: { kind: 'ProbeFailed', message: 'pcie-link tripped', retryable: true, detail: { trial: 1 } },
+        timing: { waitedMs: 1, runMs: 217, totalMs: 218 }, unblocked: [], text: '',
+      },
+    ]
+    const built = buildEnvelope(settled, 'dsh-s1', 'srv-1')
+    assert.equal(built.agent, 'dsh-s1')
+    assert.deepEqual(built.ids, ['n0', 'n1'])
+    assert.deepEqual(built.calls.map((c) => c.outcome), ['done', 'failed'])
+    assert.match(built.text, /^<fluvia-notify agent="dsh-s1" session="srv-1">/)
+    assert.match(built.text, /2 calls settled within 20ms — 1 ready, 1 failed\./)
+    assert.match(built.text, /\nready\n  c0 prepareKernel → kernel0 : Kernel 4096x4096 f32 \(wait 0ms, run 450ms\)/)
+    assert.match(built.text, /\nfailed\n  c9 flakyProbe → err9 : ProbeFailed — pcie-link tripped \[retryable\]/)
+    assert.match(built.text, /detail: \{"trial":1\}/)
+    assert.match(built.text, /→ recover by passing a ready err handle/)
+    assert.match(built.text, /now runnable\n  c0 unblocked c1/)
+    assert.match(built.text, /<\/fluvia-notify>$/)
+    ok('the coalesced envelope renders the same block the http transport delivers')
+
+    /* --------------------------- 9. the transport can name the owner outright */
+
+    const ownedByWire = new RegistryDouble()
+    const wireMine = new AgentDouble('s-wire' as TargetAgent['id'])
+    const wireOther = new AgentDouble('s-newest' as TargetAgent['id'])
+    ownedByWire.agents.push(wireMine, wireOther)
+    const wireCourier = new Courier({ agents: ownedByWire, mode: 'followup', target: 'newest', queueLimit: 200, log })
+    // `agent` in the payload says someone else entirely; the transport's owner wins.
+    wireCourier.accept(parseEnvelope(JSON.stringify(envelope(20, 'a0'))), 's-wire')
+    assert.equal(wireMine.followups.length, 1, 'an explicit owner beats both the payload and the configured target')
+    assert.equal(wireOther.followups.length, 0)
+    // An explicit owner that is gone HOLDS; it never falls back.
+    wireCourier.accept(parseEnvelope(JSON.stringify(envelope(21, 'a0'))), 's-vanished')
+    assert.equal(wireCourier.stats.queued, 1, 'a vanished owner holds the envelope')
+    assert.equal(wireOther.followups.length, 0, 'and never redirects it')
+    ok('a transport-supplied owner is authoritative and never falls back')
+
   } finally {
     await receiver.close()
   }

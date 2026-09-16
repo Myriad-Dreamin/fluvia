@@ -138,7 +138,14 @@ export interface CourierStats {
  */
 export declare class Courier {
     private readonly options;
-    /** Envelopes waiting for a live agent, oldest first. */
+    /**
+     * Envelopes waiting for a live agent, oldest first.
+     *
+     * Each remembers the session that owns it when the transport already knew —
+     * on the connection transport the notification arrived on that session's own
+     * socket, which is a stronger fact than anything the envelope's `agent`
+     * string could assert.
+     */
     private readonly pending;
     /** Mutable counters exposed through {@link stats}. */
     private readonly counters;
@@ -160,9 +167,12 @@ export declare class Courier {
      * the posting session's business to retry.
      *
      * @param envelope — a validated envelope.
+     * @param owner — the dsh session that owns it, when the transport knows.
+     *   The connection transport always knows; the HTTP transport never does and
+     *   falls back to matching `envelope.agent`.
      * @returns what happened, for the HTTP response body and the log line.
      */
-    accept(envelope: NotifyEnvelope): AcceptOutcome;
+    accept(envelope: NotifyEnvelope, owner?: string): AcceptOutcome;
     /**
      * Replay every held envelope, in arrival order, to whatever is live now.
      *

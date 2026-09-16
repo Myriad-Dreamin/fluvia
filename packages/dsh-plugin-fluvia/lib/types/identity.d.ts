@@ -35,6 +35,18 @@ export declare const FLUVIA_AGENT_PREFIX = "dsh-";
  */
 export declare function fluviaAgentId(sessionId: string): string;
 /**
+ * Force any string into fluvia's agent grammar.
+ *
+ * The runtime sanitizes the label it is sent anyway — this is not a security
+ * measure, it is so the label this plugin *asks* for is the one it gets back,
+ * which keeps logs and routing legible. A label that starts with a digit (a
+ * UUID often does) is prefixed rather than rejected.
+ *
+ * @param value — any requested label.
+ * @returns a label matching `^[A-Za-z_][\w-]*$`.
+ */
+export declare function sanitizeAgentLabel(value: string): string;
+/**
  * Whether a fluvia agent id — as it comes back on an envelope — denotes one
  * particular dsh session.
  *

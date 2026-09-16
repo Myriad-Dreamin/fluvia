@@ -36,7 +36,22 @@ const ILLEGAL = /[^\w-]/g;
  * @returns the `@`-less fluvia agent id, e.g. `dsh-8c8f0b70-0656-49f3-…`.
  */
 export function fluviaAgentId(sessionId) {
-    return `${FLUVIA_AGENT_PREFIX}${sessionId.replace(ILLEGAL, '-')}`;
+    return sanitizeAgentLabel(`${FLUVIA_AGENT_PREFIX}${sessionId}`);
+}
+/**
+ * Force any string into fluvia's agent grammar.
+ *
+ * The runtime sanitizes the label it is sent anyway — this is not a security
+ * measure, it is so the label this plugin *asks* for is the one it gets back,
+ * which keeps logs and routing legible. A label that starts with a digit (a
+ * UUID often does) is prefixed rather than rejected.
+ *
+ * @param value — any requested label.
+ * @returns a label matching `^[A-Za-z_][\w-]*$`.
+ */
+export function sanitizeAgentLabel(value) {
+    const cleaned = value.replace(ILLEGAL, '-');
+    return /^[A-Za-z_]/.test(cleaned) ? cleaned : `a-${cleaned}`;
 }
 /**
  * Whether a fluvia agent id — as it comes back on an envelope — denotes one

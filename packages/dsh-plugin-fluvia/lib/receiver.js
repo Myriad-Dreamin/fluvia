@@ -68,6 +68,13 @@ export function startReceiver(options) {
 async function handle(request, response, options, startedAt) {
     const url = new URL(request.url ?? '/', `http://${request.headers.host ?? 'localhost'}`);
     if (url.pathname === options.path && request.method === 'POST') {
+        if (!options.acceptPosts) {
+            send(response, 409, 'application/json', JSON.stringify({
+                ok: false,
+                error: 'this plugin is on transport "connect"; results arrive on each session\u2019s runtime socket, not by POST',
+            }));
+            return;
+        }
         await handlePost(request, response, options);
         return;
     }

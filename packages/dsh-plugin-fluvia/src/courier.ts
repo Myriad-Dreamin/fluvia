@@ -140,8 +140,15 @@ export interface CourierStats {
  * an agent appears.
  */
 export class Courier {
-  /** Envelopes waiting for a live agent, oldest first. */
-  private readonly pending: NotifyEnvelope[] = []
+  /**
+   * Envelopes waiting for a live agent, oldest first.
+   *
+   * Each remembers the session that owns it when the transport already knew —
+   * on the connection transport the notification arrived on that session's own
+   * socket, which is a stronger fact than anything the envelope's `agent`
+   * string could assert.
+   */
+  private readonly pending: { envelope: NotifyEnvelope; owner?: string }[] = []
 
   /** Mutable counters exposed through {@link stats}. */
   private readonly counters: CourierStats = {
@@ -183,15 +190,18 @@ export class Courier {
    * the posting session's business to retry.
    *
    * @param envelope — a validated envelope.
+   * @param owner — the dsh session that owns it, when the transport knows.
+   *   The connection transport always knows; the HTTP transport never does and
+   *   falls back to matching `envelope.agent`.
    * @returns what happened, for the HTTP response body and the log line.
    */
-  accept(envelope: NotifyEnvelope): AcceptOutcome {
+  accept(envelope: NotifyEnvelope, owner?: string): AcceptOutcome {
     this.counters.received += 1
     this.counters.lastReceivedAt = Date.now()
 
-    const targets = this.resolveFor(envelope)
+    const targets = this.resolveFor(envelope, owner)
     if (targets.length === 0) {
-      this.enqueue(envelope)
+      this.enqueue(envelope, owner)
       this.options.log.info(
         `queued ${summarizeEnvelope(envelope)} — no live agent for target "${this.options.target}" (${this.pending.length} held)`,
       )
@@ -228,18 +238,18 @@ export class Courier {
     // array being iterated.
     const batch = this.pending.splice(0, this.pending.length)
     const reached = new Set<string>()
-    const held: NotifyEnvelope[] = []
+    const held: { envelope: NotifyEnvelope; owner?: string }[] = []
     let sent = 0
-    for (const envelope of batch) {
+    for (const entry of batch) {
       // Per envelope, not once for the batch: a queue can hold work owned by
       // several sessions, and the session that just appeared may own only some
       // of it. What it does not own stays held for the session that does.
-      const targets = this.resolveFor(envelope)
+      const targets = this.resolveFor(entry.envelope, entry.owner)
       if (targets.length === 0) {
-        held.push(envelope)
+        held.push(entry)
         continue
       }
-      const delivered = this.deliver(envelope, targets)
+      const delivered = this.deliver(entry.envelope, targets)
       if (delivered.length > 0) {
         sent += 1
         for (const id of delivered) reached.add(id)
@@ -282,9 +292,17 @@ export class Courier {
    * session someone started by hand — falls through to the configured
    * {@link TargetSelector}.
    */
-  private resolveFor(envelope: NotifyEnvelope): readonly TargetAgent[] {
-    const owner = this.options.agents.list().find((agent) => matchesSession(envelope.agent, agent.id))
-    if (owner) return [owner]
+  private resolveFor(envelope: NotifyEnvelope, owner?: string): readonly TargetAgent[] {
+    const live = this.options.agents.list()
+    // An owner supplied by the transport is authoritative: the notification came
+    // back on that session's own connection, so no name matching is involved and
+    // no fallback is appropriate. If that session is gone, the envelope waits.
+    if (owner !== undefined) {
+      const exact = live.find((agent) => agent.id === owner)
+      return exact ? [exact] : []
+    }
+    const matched = live.find((agent) => matchesSession(envelope.agent, agent.id))
+    if (matched) return [matched]
     return isDshOwned(envelope.agent) ? [] : this.resolve()
   }
 
@@ -348,8 +366,8 @@ export class Courier {
    * and an agent that finally wakes wants the recent state of the graph rather
    * than its first minute.
    */
-  private enqueue(envelope: NotifyEnvelope): void {
-    this.pending.push(envelope)
+  private enqueue(envelope: NotifyEnvelope, owner?: string): void {
+    this.pending.push(owner === undefined ? { envelope } : { envelope, owner })
     this.trim()
   }
 
