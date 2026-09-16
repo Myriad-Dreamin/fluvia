@@ -1,0 +1,41 @@
+# dsh patch overlay that mounts `dsh-plugin-fluvia`.
+#
+# Pass it with `--patch`, which the launcher applies after every bundle layer
+# and after the profile's own cordis.patch.yml:
+#
+#   dsh web --port 3080 --no-open --patch /home/kamiyoru/work/ts/fluvia/packages/dsh-plugin-fluvia/fluvia.yml
+#
+# The file is a top-level array of loader patch entries. `insert` adds rows
+# that no earlier layer defined — which is what a new out-of-tree plugin is;
+# an `id`-only entry would instead override a row that already exists.
+#
+# The package must already be installed into the profile, so that the bare
+# specifier below resolves from the profile directory:
+#
+#   dsh plugin --profile web add /home/kamiyoru/work/ts/fluvia/packages/dsh-plugin-fluvia
+#
+# Every `config` key below is the schema default; they are written out because
+# this file doubles as the documented surface, and a default you can see is a
+# default you can change.
+
+- insert:
+    - id: fluvia
+      name: dsh-plugin-fluvia
+      config:
+        # Loopback only. Binding 0.0.0.0 would expose an endpoint that queues
+        # text straight into an agent's turn; do that only on a trusted network.
+        host: 127.0.0.1
+        port: 7788
+        # POST envelopes here; GET the same path for machine-readable status.
+        path: /inbox
+        # `auto` wakes an idle agent and injects into a running one, so a
+        # backlog flushing at once becomes ONE turn that has read every
+        # envelope — `followup` would open a separate turn per envelope, which
+        # is both slow and a real cost against the model key.
+        # `followup` always wakes; `inject` never does.
+        mode: auto
+        # `newest` is the session the human just opened in the Web UI.
+        # Also accepted: `all`, or a literal session id.
+        target: newest
+        # Envelopes held while no agent matches `target`; oldest evicted past this.
+        queueLimit: 200

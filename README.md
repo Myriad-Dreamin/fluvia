@@ -175,7 +175,8 @@ so the perf report always has a readable transcript alongside the timings.
 | `src/cli/` | the agent-facing surface: `bin.ts` (composition and flags), `session.ts` (the read–submit–answer loop), `format.ts` (every string an agent reads), `sinks.ts` (`--notify` wiring) |
 | `src/toolbox/` | preloadable `FunctionDef`s — the default toolbox is a deterministic GPU-kernel pipeline with realistic latencies and failures |
 | `src/demo/` | `pnpm demo`: spawns the CLI and drives it as two agents over the NDJSON protocol |
-| `src/dsh-inbox/` | `pnpm dsh-inbox`: the receiving end of `dsh:http:<url>` — stores envelopes and serves a live watch page |
+| `src/dsh-inbox/` | `pnpm dsh-inbox`: a standalone receiving end of `dsh:http:<url>` — stores envelopes and serves a live watch page, for watching the notification side without running dsh |
+| `packages/dsh-plugin-fluvia/` | the real dsh plugin: receives the same envelopes inside a dsh process and delivers them into an agent turn, so they land in the dsh Web UI ([docs/dsh-ui.md](docs/dsh-ui.md)) |
 | `src/perf/` | `pnpm demo-perf`: trace → model → self-contained HTML report, plus the local server |
 | `skills/fluvia/` | the agent-facing skill |
 | `docs/` | the protocol and the dsh integration guide |

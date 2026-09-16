@@ -91,75 +91,21 @@ lines up with the trace; only the envelope's own `at` is epoch.
 
 ## Forwarding envelopes into an agent turn
 
-A dsh-side plugin turns each record into a user message on the owning agent.
-This is the same shape `tool-jobs` uses for background job completions, and the
-reasoning carries over: a **busy** agent gets `inject()`, so the notice waits in
-its next-step inbox and several envelopes cost one step; an **idle** agent gets
-`followup()`, because an unclaimed notice is a completion the model never learns
-about.
+This is no longer a sketch: `packages/dsh-plugin-fluvia` is a real dsh plugin
+that does it. It binds an http receiver inside the dsh process, accepts the
+envelopes `--notify dsh:http:<url>` posts, and hands each one to a live agent
+through `agent.followup()` (wakes an idle driver) or `agent.inject()` (queues
+model-facing context without waking); `mode: auto` wakes an idle agent and
+injects into a running one, so a backlog that flushes at once becomes a single
+turn that has read every envelope. Envelopes that arrive before any session
+exists are queued and flushed in order on `agent/created`, which is the normal
+case — the Web UI creates its session only when a human opens one.
 
-```ts
-import type { Context } from '@deepseek-ai/cordis'
-import { createUserMessage } from '@deepseek-ai/dsh-llm'
-import type { Agent } from '@deepseek-ai/dsh-agent'
-import type { DshEnvelopeRecord } from 'fluvia/plugins/notify-dsh.ts'
+Messages are attributed to the plugin (`{ kind: 'plugin', plugin: 'fluvia' }`),
+never to the user: a program must not claim host-attested human authority.
 
-export const name = 'fluvia-notify'
-export const inject = ['agents']
-
-export interface Config {
-  /** Envelopes, however you get them: a tailed JSONL file or an HTTP handler. */
-  source: AsyncIterable<DshEnvelopeRecord>
-  /**
-   * Map a fluvia `@agent` id to the dsh agent that owns it. Use the dsh session
-   * id as the fluvia agent id and this is just `ctx.agents.get`.
-   */
-  resolve(agentId: string): Agent | undefined
-}
-
-export function apply(ctx: Context, config: Config): void {
-  ctx.effect(() => {
-    const abort = new AbortController()
-    void (async () => {
-      for await (const record of config.source) {
-        if (abort.signal.aborted) return
-        const agent = config.resolve(record.agent)
-        if (!agent) continue
-        const message = createUserMessage({
-          content: [{ type: 'text', text: record.text }],
-          source: {
-            kind: 'plugin',
-            plugin: 'fluvia-notify',
-            form: 'notice',
-            summary: `${record.calls.length} fluvia calls settled`,
-          },
-        })
-        if (agent.status === 'idle') agent.followup(message)
-        else agent.inject(message)
-      }
-    })()
-    return () => abort.abort()
-  }, 'fluvia-notify')
-}
-```
-
-Wake budgets matter here for the same reason they do for jobs: a woken turn may
-submit calls whose settlement wakes it again. Bound the consecutive wakes per
-agent and degrade to `inject()` past the budget.
-
-If you would rather register the sink **inside** a dsh application than parse
-fluvia's output, `src/plugins/notify-dsh.ts` also exports the cordis plugin:
-
-```ts
-import { dshNotifier, parseDshSpec } from 'fluvia/plugins/notify-dsh.ts'
-
-ctx.plugin(dshNotifier, parseDshSpec('dsh:http://127.0.0.1:9000/fluvia', sessionId)!)
-```
-
-`dshNotifier` declares `inject = ['notify']`, so it waits for fluvia's
-notification hub, registers the sink through `ctx.notify.register()`, and on
-unload unregisters it and closes it — flushing whatever is still inside the
-coalescing window.
+Setup, the patch overlay and the end-to-end commands are in
+**[dsh-ui.md](dsh-ui.md)**.
 
 ## Registering the skill
 
