@@ -100,6 +100,11 @@ fluvia serve --listen unix:/run/fluvia.sock --preload ./toolbox.ts \
 fluvia connect --connect unix:/run/fluvia.sock --label planner
 ```
 
+A client that reconnects with the same label is assigned the same agent id
+again (while no other connection holds it), so its handles survive the gap;
+the calls that were still running when it dropped are cancelled, because nobody
+was left to read them.
+
 Wire: NDJSON both ways, `src/server/protocol.ts`. Client frames are `hello`,
 `submit` and `bye`; server frames are `welcome` (assigned agent, session, the
 published ISA, the limits), `ack`, `control`, `error`, `result` and `bye`. A

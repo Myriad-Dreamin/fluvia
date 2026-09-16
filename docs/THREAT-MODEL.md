@@ -60,7 +60,13 @@ Stated plainly, because a boundary whose limits are vague is worse than none.
   the server refuses to start without one, but there is no TLS: tunnel it if it
   leaves the host.
 - **No replay or persistence.** Handles live in the runtime's memory; a restart
-  loses them, and there is no way to hand a handle to a future session.
+  loses them, and there is no way to hand a handle to a future session. A
+  *reconnect* is different: a client returning with the same label is assigned
+  the same agent id while no other connection holds it, so its handle namespace
+  is still there and still usable — only its unsettled calls were cancelled when
+  it dropped. That continuity is what lets a harness reconnect without losing
+  the work it already has, and it is also why a label is worth protecting with a
+  token when several tenants share one runtime.
 
 ## Operator checklist
 
