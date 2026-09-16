@@ -40,13 +40,19 @@ export { ENVELOPE_VERSION, parseEnvelope, summarizeEnvelope } from './envelope.j
 export { startReceiver } from './receiver.js';
 export type { Receiver, ReceiverOptions } from './receiver.js';
 export type { StatusView } from './status-page.js';
+export { FluviaCli, defaultCliArgs, fluviaRepoRoot, notifyUrlFor } from './cli-process.js';
+export type { CliAnswer, CliConfig } from './cli-process.js';
+export { FLUVIA_AGENT_PREFIX, fluviaAgentId, isDshOwned, matchesSession, stripAgentPrefix } from './identity.js';
+export { buildFluviaTool, renderAnswer } from './tool.js';
+export type { FluviaToolValue } from './tool.js';
 /** Cordis plugin name, used by loader diagnostics and by the logger. */
 export declare const name = "fluvia";
 /**
- * The agent registry this plugin resolves delivery targets against.
+ * Services this plugin needs before it loads.
  *
- * Declaring it makes the loader hold the plugin in `PENDING` until `agents`
- * exists, so `apply` never has to defend against a half-built context.
+ * `agents` resolves delivery targets; `tools` registers the model-facing
+ * `fluvia` tool. Declaring both makes the loader hold the plugin in `PENDING`
+ * until they exist, so `apply` never defends against a half-built context.
  */
 export declare const inject: string[];
 /** Receiver binding, delivery policy, and queue bound. */
@@ -63,6 +69,33 @@ export interface Config {
     target: TargetSelector;
     /** How many envelopes to hold while no agent matches the target; the oldest are evicted past this. */
     queueLimit: number;
+    /** The managed fluvia CLI the `fluvia` tool submits to. */
+    cli: FluviaCliConfig;
+}
+/**
+ * Configuration of the long-lived fluvia CLI child process.
+ *
+ * Defaults are chosen so that a checkout of the fluvia repository needs no
+ * configuration at all: `cwd` is derived from where this plugin is installed,
+ * and every other value matches what `pnpm demo` would use.
+ */
+export interface FluviaCliConfig {
+    /** Run the CLI and expose the `fluvia` tool. `false` leaves the plugin receive-only. */
+    enabled: boolean;
+    /** Working directory for the child. Defaults to the fluvia repo this plugin lives in. */
+    cwd: string;
+    /** Executable to run. Defaults to the Node binary running the harness. */
+    command: string;
+    /** Complete argument-vector override. Empty means the default vector, which is the documented one. */
+    args: string[];
+    /** `--concurrency` for fluvia's scheduler. */
+    concurrency: number;
+    /** `--preload` module supplying the toolbox. */
+    preload: string;
+    /** `--trace` destination; relative paths resolve against `cwd`. */
+    trace: string;
+    /** Consecutive restart attempts after an unexpected exit before giving up. */
+    maxRestarts: number;
 }
 /**
  * Schemastery validation for {@link Config}.

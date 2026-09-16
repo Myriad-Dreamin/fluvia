@@ -61,7 +61,15 @@ export interface AgentSource {
 }
 /** The logger methods the courier uses; satisfied by `ctx.logger('fluvia')`. */
 export type CourierLog = Pick<Logger, 'info' | 'warn'>;
-/** Target selector understood by {@link Courier}. */
+/**
+ * Target selector understood by {@link Courier}.
+ *
+ * This is the *fallback*. An envelope whose `agent` names one of the live dsh
+ * sessions always goes to that session first — see {@link Courier.resolveFor}
+ * — so a runtime shared by several sessions routes by ownership and only
+ * unattributed envelopes (a fluvia session nobody here started, or a CLI-level
+ * notice) fall through to this setting.
+ */
 export type TargetSelector = 
 /** The most recently created live agent — what a single-session Web UI means. */
 'newest'
@@ -171,7 +179,24 @@ export declare class Courier {
     /** Drop everything still held, for a clean plugin unload. Returns what was discarded. */
     discard(): number;
     /**
-     * Which live agents this envelope is for.
+     * Which live agents one specific envelope is for.
+     *
+     * Ownership wins over configuration. The `fluvia` tool submits every line
+     * prefixed with the calling session's own id, so `envelope.agent` identifies
+     * the session that asked for this work — and that session is the only one
+     * with any use for the answer. Routing on it is what lets two dsh sessions
+     * share one fluvia runtime without reading each other's notifications.
+     *
+     * An envelope whose owner is not live right now is HELD rather than
+     * redirected: it names a dsh session, so handing it to whichever session the
+     * configured target picks would show one conversation another's results.
+     * Only an envelope with no dsh owner at all — fluvia's own default `a0`, or a
+     * session someone started by hand — falls through to the configured
+     * {@link TargetSelector}.
+     */
+    private resolveFor;
+    /**
+     * Which live agents the configured target selects, ignoring ownership.
      *
      * `newest` takes the last entry of the registry's registration-ordered list,
      * which is the session a human just opened in the Web UI. Note that `newest`
@@ -197,6 +222,8 @@ export declare class Courier {
      * than its first minute.
      */
     private enqueue;
+    /** Enforce {@link CourierOptions.queueLimit}, counting what it costs. */
+    private trim;
 }
 /**
  * Turn an envelope into the user message a dsh agent will accept.

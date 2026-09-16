@@ -15,16 +15,26 @@
  */
 
 import { strict as assert } from 'node:assert'
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
 import type { UserMessage } from '@deepseek-ai/dsh-llm'
 // Imported through the package's own name, not by relative path: that exercises
 // the published `exports` map and the built `lib/` this plugin actually ships,
 // so a broken manifest fails here rather than inside somebody's harness.
 import {
   Courier,
+  defaultCliArgs,
+  fluviaAgentId,
+  fluviaRepoRoot,
+  matchesSession,
+  notifyUrlFor,
   parseEnvelope,
+  renderAnswer,
   startReceiver,
+  stripAgentPrefix,
   summarizeEnvelope,
   type AgentSource,
+  type CliAnswer,
   type CourierLog,
   type TargetAgent,
 } from 'dsh-plugin-fluvia'
@@ -290,6 +300,123 @@ async function main(): Promise<void> {
     assert.equal(bounded.stats.queued, 3)
     assert.equal(bounded.stats.evicted, 2)
     ok('the queue is bounded and evicts oldest-first')
+    /* ------------------------------------- 5. identity and ownership routing */
+
+    assert.equal(fluviaAgentId('8c8f0b70-0656-49f3-9471-08fd8122e648'), 'dsh-8c8f0b70-0656-49f3-9471-08fd8122e648')
+    // fluvia's prefix grammar is `^@([A-Za-z_][\w-]*)\s`, and a UUID may start
+    // with a digit — the mapped form must always be legal.
+    assert.match(fluviaAgentId('8c8f0b70-abc'), /^[A-Za-z_][\w-]*$/)
+    assert.match(fluviaAgentId('weird id/with:chars'), /^[A-Za-z_][\w-]*$/)
+    assert.ok(matchesSession('dsh-s-1', 's-1'))
+    assert.ok(matchesSession('s-1', 's-1'), 'a raw id must still match')
+    assert.ok(!matchesSession('dsh-s-2', 's-1'))
+    ok('session ids map to legal fluvia agent ids, and back')
+
+    assert.equal(stripAgentPrefix('@dsh-s1 prepareKernel({ size: 1 })'), 'prepareKernel({ size: 1 })')
+    // `inspect(@other)` is an ARGUMENT, not a prefix: rewriting must leave it be.
+    assert.equal(stripAgentPrefix('inspect(@other)'), 'inspect(@other)')
+    ok('a leading agent prefix is stripped; an @agent argument is not')
+
+    // An envelope naming a live session overrides the configured target.
+    const ownedRegistry = new RegistryDouble()
+    const mine = new AgentDouble('s-mine' as TargetAgent['id'])
+    const other = new AgentDouble('s-other' as TargetAgent['id'])
+    ownedRegistry.agents.push(mine, other)
+    const owned = new Courier({ agents: ownedRegistry, mode: 'followup', target: 'newest', queueLimit: 200, log })
+    owned.accept(parseEnvelope(JSON.stringify(envelope(11, fluviaAgentId('s-mine')))))
+    assert.equal(mine.followups.length, 1, 'the owning session must receive its own envelope')
+    assert.equal(other.followups.length, 0, 'target "newest" must not win over ownership')
+    // An envelope with no dsh owner at all (fluvia's own default agent) falls
+    // back to the configured target.
+    owned.accept(parseEnvelope(JSON.stringify(envelope(12, 'a0'))))
+    assert.equal(other.followups.length, 1, 'an unattributed envelope falls back to newest')
+    // But an envelope owned by a dsh session that is NOT live is held, never
+    // redirected: one conversation must not read another's results.
+    owned.accept(parseEnvelope(JSON.stringify(envelope(15, fluviaAgentId('s-gone')))))
+    assert.equal(owned.stats.queued, 1, 'an absent owner holds the envelope')
+    assert.equal(other.followups.length, 1, 'and does not redirect it to another session')
+    ok('envelopes route to their own session; only unattributed ones fall back')
+
+    // A queue holding two sessions' work drains only what the arriving session owns.
+    const splitRegistry = new RegistryDouble()
+    const split = new Courier({ agents: splitRegistry, mode: 'followup', target: 's-late', queueLimit: 200, log })
+    split.accept(parseEnvelope(JSON.stringify(envelope(13, fluviaAgentId('s-early')))))
+    split.accept(parseEnvelope(JSON.stringify(envelope(14, fluviaAgentId('s-late')))))
+    assert.equal(split.stats.queued, 2)
+    const late = new AgentDouble('s-late' as TargetAgent['id'])
+    splitRegistry.agents.push(late)
+    assert.equal(split.flush(), 1, 'only the arriving session\u2019s envelope may flush')
+    assert.equal(late.followups.length, 1)
+    assert.equal(split.stats.queued, 1, 'the other session\u2019s envelope stays held')
+    const early = new AgentDouble('s-early' as TargetAgent['id'])
+    splitRegistry.agents.push(early)
+    assert.equal(split.flush(), 1)
+    assert.equal(early.followups.length, 1)
+    assert.equal(split.stats.queued, 0)
+    ok('a partial flush holds what the arriving session does not own')
+
+    /* --------------------------------------------- 6. tool rendering and CLI args */
+
+    const ack: CliAnswer = {
+      type: 'ack', call: 'c0', fn: 'prepareKernel', agent: 'dsh-s1',
+      bind: { value: 'kernel0', error: 'err0' }, deps: [], state: 'running',
+    }
+    const acked = renderAnswer(ack)
+    assert.equal(acked.kind, 'ack')
+    assert.equal(acked.call, 'c0')
+    assert.equal(acked.value_handle, 'kernel0')
+    assert.equal(acked.error_handle, 'err0')
+    assert.match(acked.text, /^c0 prepareKernel ⇒ kernel0, err0 \[running\] — /)
+    assert.match(acked.text, /do not poll/)
+    assert.match(acked.text, /passing kernel0/)
+    ok('an ack renders the call id, both handles, the state and what to do next')
+
+    const waiting = renderAnswer({
+      type: 'ack', call: 'c1', fn: 'compileKernel', agent: 'dsh-s1',
+      bind: { value: 'kernel1', error: 'err1' },
+      deps: [{ name: 'kernel0', from: 'c0', kind: 'value' }], state: 'waiting',
+    })
+    assert.match(waiting.text, /\[waiting on kernel0\]/, 'a waiting call names the handle it is parked on')
+    ok('a waiting ack names its blocking handle')
+
+    const control = renderAnswer({ type: 'control', fn: 'list', agent: 'dsh-s1', text: 'call  agent\nc0    dsh-s1' })
+    assert.equal(control.kind, 'control')
+    assert.equal(control.text, 'call  agent\nc0    dsh-s1', 'control text is returned verbatim')
+    ok('a control answer is returned verbatim')
+
+    const rejected = renderAnswer({
+      type: 'error', agent: 'dsh-s1',
+      message: 'the CLI does not evaluate expressions: pass a literal or a handle',
+      line: 'compileKernel(kernel0, { opt: 1 + 2 })',
+    })
+    assert.equal(rejected.kind, 'error')
+    assert.match(rejected.text, /the CLI does not evaluate expressions: pass a literal or a handle/)
+    assert.match(rejected.text, /one plain call per line/, 'a rejection carries the syntax reminder')
+    ok('a rejected line returns the parse error verbatim plus the syntax rule')
+
+    const args = defaultCliArgs(
+      { enabled: true, cwd: '/repo', command: 'node', args: [], concurrency: 4, preload: 'src/toolbox/default.ts', trace: 'out/t.jsonl.gz' },
+      'http://127.0.0.1:7788/inbox',
+    )
+    assert.deepEqual(args, [
+      '--import', 'tsx', 'src/cli/bin.ts', '--json',
+      '--concurrency', '4',
+      '--preload', 'src/toolbox/default.ts',
+      '--trace', 'out/t.jsonl.gz',
+      '--notify', 'dsh:http://127.0.0.1:7788/inbox',
+      '--notify', 'stdout',
+    ])
+    ok('the default CLI argv is the documented one')
+
+    // A wildcard bind is an address to listen on, not one to connect to.
+    assert.equal(notifyUrlFor('0.0.0.0', 7788, '/inbox'), 'http://127.0.0.1:7788/inbox')
+    assert.equal(notifyUrlFor('127.0.0.1', 7788, '/inbox'), 'http://127.0.0.1:7788/inbox')
+    ok('the child is pointed at a reachable address, never a wildcard')
+
+    // The repo root is derived from the installed location, never hardcoded.
+    const root = fluviaRepoRoot()
+    assert.ok(existsSync(join(root, 'src', 'cli', 'bin.ts')), `repo root must contain src/cli/bin.ts, got ${root}`)
+    ok(`the fluvia repo root resolves from the plugin's own location (${root})`)
   } finally {
     await receiver.close()
   }

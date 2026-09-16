@@ -37,7 +37,9 @@ import type { Context } from '@deepseek-ai/cordis'
 // is what puts `agents` on `Context`. Nothing here references the value side.
 import type {} from '@deepseek-ai/dsh-agent'
 import { Courier, type AgentSource, type DeliveryMode, type TargetSelector } from './courier.js'
+import { FluviaCli, fluviaRepoRoot, notifyUrlFor, resolveAgainstCwd, type CliConfig } from './cli-process.js'
 import { startReceiver } from './receiver.js'
+import { buildFluviaTool } from './tool.js'
 
 export type { AcceptOutcome, AgentSource, CourierLog, CourierOptions, CourierStats, DeliveryMode, TargetAgent, TargetSelector } from './courier.js'
 export { Courier, buildMessage } from './courier.js'
@@ -46,17 +48,23 @@ export { ENVELOPE_VERSION, parseEnvelope, summarizeEnvelope } from './envelope.j
 export { startReceiver } from './receiver.js'
 export type { Receiver, ReceiverOptions } from './receiver.js'
 export type { StatusView } from './status-page.js'
+export { FluviaCli, defaultCliArgs, fluviaRepoRoot, notifyUrlFor } from './cli-process.js'
+export type { CliAnswer, CliConfig } from './cli-process.js'
+export { FLUVIA_AGENT_PREFIX, fluviaAgentId, isDshOwned, matchesSession, stripAgentPrefix } from './identity.js'
+export { buildFluviaTool, renderAnswer } from './tool.js'
+export type { FluviaToolValue } from './tool.js'
 
 /** Cordis plugin name, used by loader diagnostics and by the logger. */
 export const name = 'fluvia'
 
 /**
- * The agent registry this plugin resolves delivery targets against.
+ * Services this plugin needs before it loads.
  *
- * Declaring it makes the loader hold the plugin in `PENDING` until `agents`
- * exists, so `apply` never has to defend against a half-built context.
+ * `agents` resolves delivery targets; `tools` registers the model-facing
+ * `fluvia` tool. Declaring both makes the loader hold the plugin in `PENDING`
+ * until they exist, so `apply` never defends against a half-built context.
  */
-export const inject = ['agents']
+export const inject = ['agents', 'tools']
 
 /** Receiver binding, delivery policy, and queue bound. */
 export interface Config {
@@ -72,6 +80,34 @@ export interface Config {
   target: TargetSelector
   /** How many envelopes to hold while no agent matches the target; the oldest are evicted past this. */
   queueLimit: number
+  /** The managed fluvia CLI the `fluvia` tool submits to. */
+  cli: FluviaCliConfig
+}
+
+/**
+ * Configuration of the long-lived fluvia CLI child process.
+ *
+ * Defaults are chosen so that a checkout of the fluvia repository needs no
+ * configuration at all: `cwd` is derived from where this plugin is installed,
+ * and every other value matches what `pnpm demo` would use.
+ */
+export interface FluviaCliConfig {
+  /** Run the CLI and expose the `fluvia` tool. `false` leaves the plugin receive-only. */
+  enabled: boolean
+  /** Working directory for the child. Defaults to the fluvia repo this plugin lives in. */
+  cwd: string
+  /** Executable to run. Defaults to the Node binary running the harness. */
+  command: string
+  /** Complete argument-vector override. Empty means the default vector, which is the documented one. */
+  args: string[]
+  /** `--concurrency` for fluvia's scheduler. */
+  concurrency: number
+  /** `--preload` module supplying the toolbox. */
+  preload: string
+  /** `--trace` destination; relative paths resolve against `cwd`. */
+  trace: string
+  /** Consecutive restart attempts after an unexpected exit before giving up. */
+  maxRestarts: number
 }
 
 /**
@@ -98,6 +134,24 @@ export const Config: z<Config> = z.object({
     .natural()
     .default(200)
     .description('Envelopes held while no agent matches the target.'),
+  cli: z
+    .object({
+      enabled: z.boolean().default(true).description('Run the managed fluvia CLI and expose the `fluvia` tool.'),
+      // Empty string rather than the resolved path: a schema default is
+      // rendered into --dump-config and would otherwise bake one machine's
+      // checkout location into documentation. `apply` resolves it instead.
+      cwd: z.string().default('').description('Working directory for the CLI; defaults to the fluvia repo this plugin lives in.'),
+      command: z.string().default('').description('Executable to run; defaults to the Node binary running the harness.'),
+      args: z.array(z.string()).default([]).description('Complete argument-vector override; empty means the default vector.'),
+      concurrency: z.natural().default(4).description('fluvia --concurrency.'),
+      preload: z.string().default('src/toolbox/default.ts').description('fluvia --preload module.'),
+      trace: z.string().default('').description('fluvia --trace path; defaults to out/dsh-<timestamp>.jsonl.gz.'),
+      maxRestarts: z.natural().default(5).description('Consecutive restarts after an unexpected exit before giving up.'),
+    })
+    // No `.default({})`: schemastery already materializes a nested object from
+    // its members' own defaults when the key is absent, so an omitted `cli`
+    // block yields the full default block.
+    ,
 }) as unknown as z<Config>
 
 /**
@@ -180,14 +234,67 @@ export function apply(ctx: Context, config: Config): void {
       `listening on http://${config.host}:${receiver.port} — POST ${config.path} to deliver, GET / for status (mode=${config.mode}, target=${config.target})`,
     )
 
+    // The CLI is built only after the receiver is bound, because its
+    // `--notify` argument needs the port that was actually allocated (which
+    // differs from the configured one when `port: 0` asked for an ephemeral).
+    const cliConfig = resolveCliConfig(config)
+    const cli = new FluviaCli(
+      cliConfig,
+      notifyUrlFor(config.host, receiver.port, config.path),
+      log,
+      Math.max(1, config.cli.maxRestarts),
+    )
+
+    // Registering the tool does NOT start the child: the CLI spawns on the
+    // first submission. A harness that loads this plugin and never calls the
+    // tool should not be running a fluvia runtime.
+    const unregister = cliConfig.enabled ? ctx.tools.register(buildFluviaTool(cli)) : undefined
+    if (cliConfig.enabled) {
+      log.info(`tool "fluvia" registered; CLI starts on first use (cwd ${cliConfig.cwd}, trace ${cliConfig.trace})`)
+    } else {
+      log.info('managed CLI disabled (cli.enabled: false) — this plugin is receive-only')
+    }
+
     return async () => {
       if (scheduled) {
         clearImmediate(scheduled)
         scheduled = undefined
       }
+      // Tool first: no new submissions while the child is going down.
+      unregister?.()
+      await cli.stop()
       await receiver.close()
       const dropped = courier.discard()
       log.info(`stopped${dropped > 0 ? `, discarded ${dropped} held envelope(s)` : ''}`)
     }
   }, 'fluvia-receiver')
+}
+
+/**
+ * Fill in the CLI configuration the schema deliberately left blank.
+ *
+ * The schema's defaults for `cwd`, `command` and `trace` are empty strings
+ * because a schemastery default is rendered into `--dump-config` and shipped
+ * documentation; a resolved absolute path there would publish one developer's
+ * directory layout. Resolution therefore happens here, at load, where it can
+ * see the running process.
+ *
+ * @param config — the validated plugin configuration.
+ * @returns a fully resolved {@link CliConfig}.
+ */
+function resolveCliConfig(config: Config): CliConfig {
+  const cwd = config.cli.cwd || fluviaRepoRoot()
+  const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\..+$/, '').replace('T', '-')
+  const resolved: CliConfig = {
+    enabled: config.cli.enabled,
+    cwd,
+    // `process.execPath` rather than the string `node`: the harness may be
+    // running under a version manager where `node` on PATH is a different one.
+    command: config.cli.command || process.execPath,
+    args: config.cli.args,
+    concurrency: Math.max(1, config.cli.concurrency),
+    preload: config.cli.preload,
+    trace: resolveAgainstCwd(cwd, config.cli.trace || `out/dsh-${stamp}.jsonl.gz`),
+  }
+  return resolved
 }

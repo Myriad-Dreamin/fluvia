@@ -21,7 +21,9 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.test.json",
-    "verify": "node --experimental-strip-types test/verify.ts"
+    "verify": "node --experimental-strip-types test/verify.ts && node --experimental-strip-types test/loop.ts",
+    "verify:unit": "node --experimental-strip-types test/verify.ts",
+    "verify:loop": "node --experimental-strip-types test/loop.ts"
   },
   "license": "MIT",
   "engines": {

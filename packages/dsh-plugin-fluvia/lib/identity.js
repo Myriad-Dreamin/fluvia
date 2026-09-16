@@ -16,7 +16,6 @@
  *
  * @module dsh-plugin-fluvia/identity
  */
-
 /**
  * Prefix that turns any dsh session id into a legal fluvia agent id.
  *
@@ -24,11 +23,9 @@
  * mapping live in this process, nothing outside reads it, and making it
  * configurable would only create a way for the two ends to be set differently.
  */
-export const FLUVIA_AGENT_PREFIX = 'dsh-'
-
+export const FLUVIA_AGENT_PREFIX = 'dsh-';
 /** Characters fluvia's prefix grammar allows after the first one. */
-const ILLEGAL = /[^\w-]/g
-
+const ILLEGAL = /[^\w-]/g;
 /**
  * The fluvia agent id that stands for one dsh session.
  *
@@ -38,10 +35,9 @@ const ILLEGAL = /[^\w-]/g
  * @param sessionId — a dsh session/agent id.
  * @returns the `@`-less fluvia agent id, e.g. `dsh-8c8f0b70-0656-49f3-…`.
  */
-export function fluviaAgentId(sessionId: string): string {
-  return `${FLUVIA_AGENT_PREFIX}${sessionId.replace(ILLEGAL, '-')}`
+export function fluviaAgentId(sessionId) {
+    return `${FLUVIA_AGENT_PREFIX}${sessionId.replace(ILLEGAL, '-')}`;
 }
-
 /**
  * Whether a fluvia agent id — as it comes back on an envelope — denotes one
  * particular dsh session.
@@ -57,10 +53,9 @@ export function fluviaAgentId(sessionId: string): string {
  * @param sessionId — the dsh session to test.
  * @returns whether the envelope belongs to that session.
  */
-export function matchesSession(envelopeAgent: string, sessionId: string): boolean {
-  return envelopeAgent === fluviaAgentId(sessionId) || envelopeAgent === sessionId
+export function matchesSession(envelopeAgent, sessionId) {
+    return envelopeAgent === fluviaAgentId(sessionId) || envelopeAgent === sessionId;
 }
-
 /**
  * Whether a fluvia agent id was minted by this plugin for a dsh session.
  *
@@ -76,10 +71,9 @@ export function matchesSession(envelopeAgent: string, sessionId: string): boolea
  * @param envelopeAgent — `envelope.agent`, the fluvia-side agent id.
  * @returns whether the id denotes a dsh session in this harness.
  */
-export function isDshOwned(envelopeAgent: string): boolean {
-  return envelopeAgent.startsWith(FLUVIA_AGENT_PREFIX)
+export function isDshOwned(envelopeAgent) {
+    return envelopeAgent.startsWith(FLUVIA_AGENT_PREFIX);
 }
-
 /**
  * Strip a leading `@agent ` prefix from a submitted line.
  *
@@ -91,7 +85,7 @@ export function isDshOwned(envelopeAgent: string): boolean {
  * @param line — one submitted line.
  * @returns the line with any leading agent prefix removed, trimmed.
  */
-export function stripAgentPrefix(line: string): string {
-  const match = /^@([A-Za-z_][\w-]*)\s+([\s\S]*)$/.exec(line.trim())
-  return match ? match[2]!.trim() : line.trim()
+export function stripAgentPrefix(line) {
+    const match = /^@([A-Za-z_][\w-]*)\s+([\s\S]*)$/.exec(line.trim());
+    return match ? match[2].trim() : line.trim();
 }

@@ -18,6 +18,7 @@
  */
 import { boundContextSummary, createUserMessage } from '@deepseek-ai/dsh-llm';
 import { summarizeEnvelope } from './envelope.js';
+import { isDshOwned, matchesSession } from './identity.js';
 /**
  * Routes envelopes to live agents, holding them when there are none.
  *
@@ -74,7 +75,7 @@ export class Courier {
     accept(envelope) {
         this.counters.received += 1;
         this.counters.lastReceivedAt = Date.now();
-        const targets = this.resolve();
+        const targets = this.resolveFor(envelope);
         if (targets.length === 0) {
             this.enqueue(envelope);
             this.options.log.info(`queued ${summarizeEnvelope(envelope)} — no live agent for target "${this.options.target}" (${this.pending.length} held)`);
@@ -104,21 +105,41 @@ export class Courier {
     flush() {
         if (this.pending.length === 0)
             return 0;
-        const targets = this.resolve();
-        if (targets.length === 0)
-            return 0;
         // Detach the whole queue before delivering: `followup` wakes a driver, and
         // a driver that somehow posts back into this courier must not mutate the
         // array being iterated.
         const batch = this.pending.splice(0, this.pending.length);
+        const reached = new Set();
+        const held = [];
         let sent = 0;
         for (const envelope of batch) {
-            if (this.deliver(envelope, targets).length > 0)
+            // Per envelope, not once for the batch: a queue can hold work owned by
+            // several sessions, and the session that just appeared may own only some
+            // of it. What it does not own stays held for the session that does.
+            const targets = this.resolveFor(envelope);
+            if (targets.length === 0) {
+                held.push(envelope);
+                continue;
+            }
+            const delivered = this.deliver(envelope, targets);
+            if (delivered.length > 0) {
                 sent += 1;
-            else
+                for (const id of delivered)
+                    reached.add(id);
+            }
+            else {
                 this.counters.failed += 1;
+            }
         }
-        this.options.log.info(`flushed ${sent}/${batch.length} held envelope(s) to ${targets.map((a) => a.id).join(', ')}`);
+        if (held.length > 0) {
+            // Ahead of anything that arrived while we were delivering, so arrival
+            // order survives a partial flush.
+            this.pending.unshift(...held);
+            this.trim();
+        }
+        if (sent > 0) {
+            this.options.log.info(`flushed ${sent}/${batch.length} held envelope(s) to ${[...reached].join(', ')}`);
+        }
         return sent;
     }
     /** Drop everything still held, for a clean plugin unload. Returns what was discarded. */
@@ -128,7 +149,29 @@ export class Courier {
         return dropped;
     }
     /**
-     * Which live agents this envelope is for.
+     * Which live agents one specific envelope is for.
+     *
+     * Ownership wins over configuration. The `fluvia` tool submits every line
+     * prefixed with the calling session's own id, so `envelope.agent` identifies
+     * the session that asked for this work — and that session is the only one
+     * with any use for the answer. Routing on it is what lets two dsh sessions
+     * share one fluvia runtime without reading each other's notifications.
+     *
+     * An envelope whose owner is not live right now is HELD rather than
+     * redirected: it names a dsh session, so handing it to whichever session the
+     * configured target picks would show one conversation another's results.
+     * Only an envelope with no dsh owner at all — fluvia's own default `a0`, or a
+     * session someone started by hand — falls through to the configured
+     * {@link TargetSelector}.
+     */
+    resolveFor(envelope) {
+        const owner = this.options.agents.list().find((agent) => matchesSession(envelope.agent, agent.id));
+        if (owner)
+            return [owner];
+        return isDshOwned(envelope.agent) ? [] : this.resolve();
+    }
+    /**
+     * Which live agents the configured target selects, ignoring ownership.
      *
      * `newest` takes the last entry of the registry's registration-ordered list,
      * which is the session a human just opened in the Web UI. Note that `newest`
@@ -189,6 +232,10 @@ export class Courier {
      */
     enqueue(envelope) {
         this.pending.push(envelope);
+        this.trim();
+    }
+    /** Enforce {@link CourierOptions.queueLimit}, counting what it costs. */
+    trim() {
         while (this.pending.length > this.options.queueLimit) {
             this.pending.shift();
             this.counters.evicted += 1;
