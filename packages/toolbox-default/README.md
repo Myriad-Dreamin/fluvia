@@ -17,7 +17,7 @@ The package also ships the recordings this toolbox is benchmarked against
 own smoke test:
 
 ```sh
-fluvia run node_modules/@fluvia/toolbox-default
+fluvia bench node_modules/@fluvia/toolbox-default
 ```
 
 MIT © 2026 Myriad-Dreamin

@@ -22,8 +22,7 @@
     "demo-perf": "node packages/cli/bin/fluvia.js perf",
     "dsh-inbox": "node packages/cli/bin/fluvia.js dsh-inbox",
     "bench": "node packages/cli/bin/fluvia.js bench",
-    "bench:page": "node packages/cli/bin/fluvia.js bench-page",
-    "run": "node packages/cli/bin/fluvia.js run",
+    "slice": "node packages/cli/bin/fluvia.js slice",
     "test": "pnpm test:boundary && pnpm --filter dsh-plugin-fluvia verify && pnpm --filter pi-web-fluvia verify",
     "test:boundary": "pnpm --filter @fluvia/cli test:boundary"
   },

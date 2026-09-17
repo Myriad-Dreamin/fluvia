@@ -9,7 +9,7 @@
     "build": "tsc --noEmit -p tsconfig.json && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json",
-    "demo-trace": "cd ../.. && pnpm bench export --trace out/s-20260915-223018.jsonl.gz --out packages/pi-web-fluvia/public/demo-trace.json",
+    "demo-trace": "cd ../.. && pnpm slice export --trace out/s-20260915-223018.jsonl.gz --out packages/pi-web-fluvia/public/demo-trace.json",
     "verify": "tsx test/verify.ts",
     "replay": "tsx test/replay.ts"
   },

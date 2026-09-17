@@ -1,5 +1,5 @@
 /**
- * `pnpm replay <trace.json>` — play an exported pi × fluvia run in Node with no
+ * `pnpm replay <trace.json>` — play an exported pi × fluvia bench in Node with no
  * model, and print what happened.
  *
  * Same machinery as `fluvia.replayTrace` in the browser console: the recorded

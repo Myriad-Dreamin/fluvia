@@ -320,7 +320,7 @@ function stopLive(): void {
 function useTrace(events: unknown, name: string): void {
   ui.error = ''
   try {
-    if (!Array.isArray(events)) throw new Error('expected a JSON array of trace events (pnpm bench export)')
+    if (!Array.isArray(events)) throw new Error('expected a JSON array of trace events (pnpm slice export)')
     const trace = loadTrace(events as TraceEvent[])
     ui.trace = trace
     ui.traceName = name
@@ -696,7 +696,7 @@ function sliceForm() {
               ${running ? html`<button class="btn" @click=${stopSlice}>Stop</button>` : html`<button class="btn primary" @click=${startSlice}>Start</button>`}
             </div>
           `
-        : html`<p class="hint">Load a trace exported with <code>pnpm bench export --trace &lt;gz&gt; --out &lt;json&gt;</code>, or the demo trace.</p>`}
+        : html`<p class="hint">Load a trace exported with <code>pnpm slice export --trace &lt;gz&gt; --out &lt;json&gt;</code>, or the demo trace.</p>`}
       ${ui.sliceStatus ? html`<p class="status">${ui.sliceStatus}</p>` : nothing}
       ${ui.wakes.length ? html`<details open><summary>Wakes (${ui.wakes.length})</summary><ol class="wakes">${ui.wakes.map((w) => html`<li>${w}</li>`)}</ol></details>` : nothing}
       ${ui.outcome ? scorecard(ui.outcome.report, ui.outcome) : nothing}

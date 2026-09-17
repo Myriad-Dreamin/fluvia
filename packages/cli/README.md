@@ -15,8 +15,8 @@ npx fluvia --help
 | `fluvia perf` | render a trace as a self-contained HTML report and serve it |
 | `fluvia dsh-inbox` | receive `dsh:http:<url>` envelopes and watch them live |
 | `fluvia bench` | cut a recorded session into a slice: `lines`, `replay`, `export` |
-| `fluvia bench-page` | build the interactive slice-bench page (needs a checkout) |
-| `fluvia run` | run every `*.bench.ts` case in a tree and report pass or fail |
+| `fluvia slice page` | build the interactive slice-bench page (needs a checkout) |
+| `fluvia bench` | run every `*.bench.ts` case in a tree and report pass or fail |
 
 Each command takes `--help`.
 

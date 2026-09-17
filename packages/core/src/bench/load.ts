@@ -40,7 +40,7 @@ export interface PiWebRecord {
 
 /** Where a slice is cut. */
 export type BenchCut =
-  /** Recorded line index, as `fluvia bench lines` prints it. */
+  /** Recorded line index, as `fluvia slice lines` prints it. */
   | { line: number }
   /** The first line the `turn`-th assistant turn submitted (pi-web traces). */
   | { turn: number }

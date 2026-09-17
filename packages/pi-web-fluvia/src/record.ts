@@ -1,5 +1,5 @@
 /**
- * `trace.json`: one pi × fluvia run, exported so it can be watched again
+ * `trace.json`: one pi × fluvia bench, exported so it can be watched again
  * without a model.
  *
  * It holds what the agent was given (system prompt, tools' runtime, the slice

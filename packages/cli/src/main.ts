@@ -43,16 +43,12 @@ const COMMANDS: Record<string, Command> = {
     load: () => import('./dsh-inbox/bin.ts'),
   },
   bench: {
-    summary: 'cut a recorded session into a slice: lines | replay | export',
+    summary: 'run every `*.bench.ts` case in a tree and report pass or fail',
     load: () => import('./bench/bin.ts'),
   },
-  'bench-page': {
-    summary: 'build the interactive slice-bench page into one HTML file',
-    load: () => import('./bench/page/build.ts'),
-  },
-  run: {
-    summary: 'run every `*.bench.ts` case in a tree and report pass or fail',
-    load: () => import('./run/bin.ts'),
+  slice: {
+    summary: 'cut a recorded session: lines | replay | export | page',
+    load: () => import('./slice/bin.ts'),
   },
 }
 

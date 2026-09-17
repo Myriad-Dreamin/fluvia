@@ -23,8 +23,8 @@ jobs:
       - run: pnpm build
       - run: pnpm typecheck
       - run: pnpm test
-      - name: fluvia run (bench cases)
-        run: npx fluvia run . --json > bench-report.json && node -e "const r=require('./bench-report.json'); console.log(JSON.stringify(r.summary ?? r, null, 1))"
+      - name: fluvia bench (bench cases)
+        run: npx fluvia bench . --json > bench-report.json && node -e "const r=require('./bench-report.json'); console.log(JSON.stringify(r.summary ?? r, null, 1))"
       - uses: actions/upload-artifact@v4
         if: always()
         with:

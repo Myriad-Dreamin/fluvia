@@ -102,7 +102,7 @@ export type TakeoverDriver = (ctx: TakeoverContext) => Promise<void>
 export type BenchSubject =
   /** Run the slice under a different scheduler concurrency. */
   | { concurrency: number }
-  /** Replace recorded lines by index, as `fluvia bench replay --edit` does. */
+  /** Replace recorded lines by index, as `fluvia slice replay --edit` does. */
   | { edits: Record<number, string> }
   /**
    * Swap instructions' implementations, by name. A bare function replaces the

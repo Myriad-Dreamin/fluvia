@@ -34,10 +34,10 @@ typed it.
 
 ```sh
 pnpm add -D @fluvia/cli @fluvia/toolbox-default
-npx fluvia run .
+npx fluvia bench .
 ```
 
-`fluvia run` discovers every `*.bench.ts` under the tree and runs it. Cases
+`fluvia bench` discovers every `*.bench.ts` under the tree and runs it. Cases
 that only replay a recording cost nothing, and the totals line says so. The
 default toolbox ships four cases over two recordings, so a fresh install has
 something to run:
@@ -132,9 +132,9 @@ a scripted stand-in and spends nothing; a driver that samples a model declares
 it, and the totals line counts those runs separately.
 
 ```sh
-npx fluvia run .                  # every *.bench.ts under the tree
-npx fluvia run . --filter preset  # only files or cases whose name contains it
-npx fluvia run . --json           # { cases, errors, summary }
+npx fluvia bench .                  # every *.bench.ts under the tree
+npx fluvia bench . --filter preset  # only files or cases whose name contains it
+npx fluvia bench . --json           # { cases, errors, summary }
 ```
 
 Exit code 1 when a case fails, 2 when a file could not be loaded. The other
@@ -178,10 +178,10 @@ Node >= 24. `pnpm` comes from corepack.
 pnpm install
 pnpm build       # compile every package to lib/, in dependency order
 pnpm test        # boundary checks, the dsh plugin, the browser app
-npx fluvia run . # the bench cases
+npx fluvia bench . # the bench cases
 pnpm demo        # drive the CLI as a scripted pair of agents → out/<session>.jsonl.gz
 pnpm demo-perf   # render the newest trace to out/perf.html and serve it
-pnpm bench:page  # build the interactive slice page from the newest trace
+pnpm slice page  # build the interactive slice page from the newest trace
 ```
 
 `pnpm demo` is not an in-process simulation: it spawns the CLI as a real child
@@ -204,7 +204,7 @@ fluvia cli [options]
 ```
 
 Sink specs: `stdout`, `file:<path>`, `dsh`, `dsh:stdout`, `dsh:file:<path>`,
-`dsh:http:<url>`. `fluvia bench lines|replay|export` cuts and replays a trace
+`dsh:http:<url>`. `fluvia slice lines|replay|export` cuts and replays a trace
 from the command line without a case file; `fluvia --help` lists the rest.
 
 ### The `fluvia-dsh` handler
@@ -263,7 +263,7 @@ unchanged in dsh (`.dsh/skills/fluvia/`) and in Claude Code
 | package | what |
 | --- | --- |
 | [`@fluvia/core`](packages/core) | the runtime (parser, scheduler, handles, notifications), traces, slicing, replay and the case API; runs in Node and in the browser |
-| [`@fluvia/cli`](packages/cli) | the `fluvia` executable: `run`, `bench`, `cli`, `serve`, `connect`, `demo`, `perf`, `dsh-inbox`, `bench-page` |
+| [`@fluvia/cli`](packages/cli) | the `fluvia` executable: `bench`, `slice`, `cli`, `serve`, `connect`, `demo`, `perf`, `dsh-inbox` |
 | [`@fluvia/toolbox-default`](packages/toolbox-default) | the toolbox loaded when `--preload` is not given: a deterministic GPU-kernel pipeline with realistic latencies and failures, its recordings and its cases |
 | [`dsh-plugin-fluvia`](packages/dsh-plugin-fluvia) | the DeepSeek Harness plugin: a `fluvia` tool for the model and envelopes delivered into its turn, over a socket to a runtime outside the sandbox |
 | [`pi-web-fluvia`](packages/pi-web-fluvia) | a pi agent driving `@fluvia/core` entirely in the browser; records runs as `trace.json` and replays them without a model |
@@ -272,7 +272,7 @@ The last two are not published yet.
 
 ## Status
 
-`0.0.1-alpha.1`. The runtime, tracing, slicing, replay, cases and `fluvia run`
+`0.0.1-alpha.1`. The runtime, tracing, slicing, replay, cases and `fluvia bench`
 work and are covered by the checks above. Not there yet: snapshots at
 notifications instead of replay-from-start, cached model judges, `pass^k`
 reporting across runs, and a takeover driver for a hosted model in the box.

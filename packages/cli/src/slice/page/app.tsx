@@ -101,7 +101,7 @@ function App() {
         <p>
           Everything on this page runs the real fluvia runtime in your browser: the parser, scheduler, notification hub
           and default toolbox from the repository, driven by <code>SliceSession</code>. The same engine runs from a terminal
-          as <code>pnpm bench replay</code>, and the pi web app uses it to hand a slice to a pi agent.
+          as <code>pnpm slice replay</code>, and the pi web app uses it to hand a slice to a pi agent.
         </p>
       </footer>
     </div>

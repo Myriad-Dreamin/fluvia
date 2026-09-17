@@ -12,7 +12,7 @@
  * changing any outcome, and that a deliberately broken line fails in the way it
  * should and is recovered from in the way it should.
  *
- * Run them with `fluvia run .`.
+ * Run them with `fluvia bench .`.
  */
 
 import { defineBench, judges } from '@fluvia/core/bench/case'

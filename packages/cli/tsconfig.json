@@ -5,5 +5,5 @@
     "outDir": "lib"
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["src/bench/page/agent.ts", "src/bench/page/env.d.ts"]
+  "exclude": ["src/slice/page/agent.ts", "src/slice/page/env.d.ts"]
 }

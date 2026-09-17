@@ -1,7 +1,7 @@
 /**
  * Build the slice-bench demo page into one self-contained HTML file.
  *
- *   fluvia bench-page [--trace out/<session>.jsonl.gz] [--out out/bench-page/index.html]
+ *   fluvia slice page [--trace out/<session>.jsonl.gz] [--out out/bench-page/index.html]
  *
  * React loads from cdnjs as UMD globals; everything else — the fluvia runtime,
  * the page, its stylesheet and the recorded trace — is inlined. Nothing the
@@ -21,13 +21,13 @@ import { readTrace } from '@fluvia/core/trace'
 
 /**
  * The page's own sources. esbuild reads `app.tsx` and `styles.css` directly
- * rather than anything `tsc` emitted, so this resolves to `src/bench/page/`
+ * rather than anything `tsc` emitted, so this resolves to `src/slice/page/`
  * whether the caller is the built `lib/` copy or the source tree. A published
  * package ships only `lib/`, so this command needs a checkout.
  */
-const PAGE_SRC = fileURLToPath(new URL('../../../src/bench/page/', import.meta.url))
+const PAGE_SRC = fileURLToPath(new URL('../../../src/slice/page/', import.meta.url))
 
-/** Build the demo page from `argv` (everything after `fluvia bench-page`). */
+/** Build the demo page from `argv` (everything after `fluvia slice page`). */
 export async function main(argv: string[]): Promise<void> {
   const here = PAGE_SRC.replace(/\/$/, '')
   if (!existsSync(resolve(here, 'app.tsx'))) {
