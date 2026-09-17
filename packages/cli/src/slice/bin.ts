@@ -26,7 +26,25 @@ import { SliceSession } from '@fluvia/core/bench/session'
 import type { SliceReport } from '@fluvia/core/bench/session'
 
 /** Run the slice bench against `argv` (everything after `fluvia bench`). */
+const USAGE = `fluvia slice — cut a recorded session into a slice and replay it
+
+  fluvia slice lines  --trace <file>
+  fluvia slice replay --trace <file> --from <n> [--to <n>] [--concurrency <n>]
+                      [--edit <n>=<line>]... [--json]
+  fluvia slice export --trace <file> --out <file.json>
+  fluvia slice page   [--trace <file>] [--out <file.html>]
+
+lines   list the recorded lines with what each was typed after
+replay  type the slice again on a virtual clock and diff every call against the recording
+export  write the trace's events as a JSON array
+page    build the interactive slice page into one HTML file (needs a checkout)
+`
+
 export async function main(argv: string[]): Promise<void> {
+  if (!argv.length || argv.includes('--help') || argv.includes('-h') || argv[0] === 'help') {
+    process.stdout.write(USAGE)
+    return
+  }
   if (argv[0] === 'page') {
     const { main: buildPage } = await import('./page/build.ts')
     await buildPage(argv.slice(1))
@@ -48,7 +66,7 @@ export async function main(argv: string[]): Promise<void> {
 
   const command = positionals[0] ?? 'lines'
   if (!values.trace) {
-    process.stderr.write('bench: --trace <file> is required\n')
+    process.stderr.write('slice: --trace <file> is required\n')
     process.exit(2)
   }
   const loaded = readTrace(values.trace)

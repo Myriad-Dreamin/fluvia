@@ -1,4 +1,4 @@
-# Trust boundary
+# Threat model
 
 The deployment fluvia is built for: **the model runs inside a sandbox, the
 instruction set runs outside it.**

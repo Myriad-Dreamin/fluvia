@@ -1,4 +1,4 @@
-# Fluvia protocol (MVP)
+# Protocol
 
 Fluvia is a **fully asynchronous dataflow runtime behind a CLI**. An LLM agent
 writes one JS-syntax call per line. The CLI parses it, binds two variables to
@@ -91,7 +91,7 @@ is what `pnpm demo` exercises.
 runtime, the instruction set and the trace live where the model cannot reach
 them; the client may submit lines and read its own results, and nothing else.
 Identity is assigned by the server, handles are namespaced per agent, and the
-limits are the server's. See **[THREAT-MODEL.md](THREAT-MODEL.md)**, and
+limits are the server's. See **[the threat model](./threat-model)**, and
 `pnpm test:boundary` for the enforcement checked as attacks.
 
 ```
@@ -185,7 +185,8 @@ default.
 `fluvia-dsh` is the sink built for DeepSeek Harness: it coalesces notifications
 that land within a short window into one envelope, so an agent turn is
 interrupted once rather than five times, and renders them in dsh's
-notification dialect.
+notification dialect. See [DeepSeek Harness](../guide/dsh) for the envelope and
+its transports.
 
 ## 7. Trace
 

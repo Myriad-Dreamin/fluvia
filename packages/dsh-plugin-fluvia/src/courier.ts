@@ -37,7 +37,7 @@ import { isDshOwned, matchesSession } from './identity.js'
  * `auto` picks per agent: `followup` when the agent is idle (an unclaimed
  * notice is a completion the model never learns about) and `inject` when it is
  * already running (several envelopes then cost one step instead of one turn
- * each). It is the policy `docs/dsh-integration.md` describes, and the one to
+ * each). It is the policy `docs/guide/dsh.md` describes, and the one to
  * reach for when a queued backlog would otherwise become a queue of turns.
  */
 export type DeliveryMode = 'followup' | 'inject' | 'auto'
