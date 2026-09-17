@@ -65,6 +65,24 @@ export interface Limits {
 export interface WireNotification {
   /** Stable notification id, e.g. `n4`. */
   id: string
+  /**
+   * `processExited` marks the notice a runtime pushes when a child spawned by
+   * {@link WireNotification.call} exits. Absent from older runtimes, where every
+   * notification is a settled call.
+   */
+  event?: 'callSettled' | 'processExited'
+  /** Exit detail when `event === 'processExited'`. */
+  process?: {
+    id: string
+    pid: number
+    command: string
+    code: number | null
+    signal: string | null
+    stdout: string
+    stderr: string
+    bytes: { stdout: number; stderr: number }
+    runMs: number
+  }
   /** When the call settled, relative to the runtime's session origin. */
   at: number
   /** The agent the server attributed the call to. */

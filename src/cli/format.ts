@@ -52,6 +52,7 @@ export function renderSkip(reason: SkipReason, from: string): string {
  * `fluvia-dsh` groups several of them into one envelope.
  */
 export function renderNotificationText(notification: Notification): string {
+  if (notification.event === 'processExited' && notification.process) return renderProcessExit(notification)
   const { call, fn, timing, ready } = notification
   const timings = `wait ${ms(timing.waitedMs)}, run ${ms(timing.runMs)}`
   let head: string
@@ -74,6 +75,27 @@ export function renderNotificationText(notification: Notification): string {
   }
   const unblocked = notification.unblocked.length ? `\n  now runnable: ${notification.unblocked.join(', ')}` : ''
   return head + unblocked
+}
+
+/**
+ * `c0 processExited(process0) p0 exit code 0 after 2.0s` plus the two log
+ * paths, each on its own line because they are what the agent acts on next.
+ */
+function renderProcessExit(notification: Notification): string {
+  const exit = notification.process!
+  const status = exit.signal ? `killed by ${exit.signal}` : `exit code ${exit.code}`
+  return [
+    `${notification.call} processExited(${notification.bind.value}) ${exit.id} pid ${exit.pid} ${status} after ${ms(exit.runMs)} · ${exit.command}`,
+    `  stdout ${exit.stdout} (${bytes(exit.bytes.stdout)})`,
+    `  stderr ${exit.stderr} (${bytes(exit.bytes.stderr)})`,
+  ].join('\n')
+}
+
+/** Byte counts at a glance: `0 B`, `812 B`, `4.1 KB`, `3.2 MB`. */
+export function bytes(value: number): string {
+  if (value < 1024) return `${value} B`
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`
+  return `${(value / 1024 / 1024).toFixed(1)} MB`
 }
 
 /** The compact one-liner the `stdout` sink prints. */

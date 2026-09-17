@@ -114,6 +114,7 @@ tsx src/cli/bin.ts [options]
   --notify <spec>      sink, repeatable (default: stdout)
   --script <file>      read lines from a file instead of stdin
   --session <id>       session id; otherwise derived from --trace
+  --proc-dir <dir>     stdout/stderr logs of spawned processes (default: <tmpdir>/fluvia/<session>)
   --json               stdout becomes NDJSON (machine mode) instead of human text
   --quiet              suppress the startup banner (answers are still printed)
 ```
@@ -189,9 +190,9 @@ so the perf report always has a readable transcript alongside the timings.
 | `src/server/` | `pnpm serve`: the runtime on the far side of the boundary — wire protocol, per-connection identity, admission and limits |
 | `src/client/` | `pnpm connect`: the thin, untrusted client and its REPL |
 | `src/core/` | the contract everything agrees on: `types.ts` (call, handle, notification, trace), `parser.ts` (one line → one call), `describe.ts` (values → type + summary), `trace.ts` (gzip JSONL writer and reader) |
-| `src/plugins/` | one cordis plugin per concern: `registry` (loaded functions), `env` (handle bindings, shared by every agent in the runtime), `scheduler` (dependency resolution, concurrency, cancellation, skip cascade), `notify` (the hub), `notify-dsh` (the dsh handler), `inspect` (the control calls) |
+| `src/plugins/` | one cordis plugin per concern: `registry` (loaded functions), `env` (handle bindings, shared by every agent in the runtime), `scheduler` (dependency resolution, concurrency, cancellation, skip cascade), `notify` (the hub), `processes` (spawned children and their `processExited` notices), `notify-dsh` (the dsh handler), `inspect` (the control calls) |
 | `src/cli/` | the agent-facing surface: `bin.ts` (composition and flags), `session.ts` (the read–submit–answer loop), `format.ts` (every string an agent reads), `sinks.ts` (`--notify` wiring) |
-| `src/toolbox/` | preloadable `FunctionDef`s — the default toolbox is a deterministic GPU-kernel pipeline with realistic latencies and failures |
+| `src/toolbox/` | preloadable `FunctionDef`s — the default toolbox is a deterministic GPU-kernel pipeline with realistic latencies and failures; `process.ts` is the opt-in `exec` that spawns real programs |
 | `src/demo/` | `pnpm demo`: spawns the CLI and drives it as two agents over the NDJSON protocol |
 | `src/dsh-inbox/` | `pnpm dsh-inbox`: a standalone receiving end of `dsh:http:<url>` — stores envelopes and serves a live watch page, for watching the notification side without running dsh |
 | `packages/dsh-plugin-fluvia/` | the real dsh plugin: receives the same envelopes inside a dsh process and delivers them into an agent turn, so they land in the dsh Web UI ([docs/dsh-ui.md](docs/dsh-ui.md)) |

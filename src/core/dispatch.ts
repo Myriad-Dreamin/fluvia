@@ -131,6 +131,8 @@ function runControl(ctx: Context, def: FunctionDef, args: RawArg[], agent: strin
     progress: () => {},
     sleep: async () => {},
     runtime: ctx.calls.facade,
+    // Control answers synchronously and binds no handle a process could hang off.
+    spawn: () => Promise.reject(new Error('control functions cannot spawn processes')),
   }) as ControlResult
 }
 
