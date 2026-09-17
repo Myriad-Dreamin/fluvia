@@ -16,7 +16,7 @@
 
 import type { AgentMessage } from '@mariozechner/pi-agent-core'
 import type { AssistantMessage } from '@mariozechner/pi-ai'
-import type { TraceEvent } from '../../../src/core/types.ts'
+import type { TraceEvent } from '@fluvia/core/types'
 import type { SliceSetup } from './slice.ts'
 
 export const RECORD_FORMAT = 'pi-web-fluvia.trace'

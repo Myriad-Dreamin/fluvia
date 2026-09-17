@@ -1,0 +1,61 @@
+{
+  "name": "@fluvia/cli",
+  "version": "0.0.1-alpha.1",
+  "description": "The fluvia command line: the REPL, the out-of-sandbox runtime and its client, the demo, the perf report and the slice bench",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Myriad-Dreamin/fluvia.git",
+    "directory": "packages/cli"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "bin": {
+    "fluvia": "bin/fluvia.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./lib/main.d.ts",
+      "default": "./lib/main.js"
+    },
+    "./client": {
+      "types": "./lib/client/client.d.ts",
+      "default": "./lib/client/client.js"
+    },
+    "./preload": {
+      "types": "./lib/preload.d.ts",
+      "default": "./lib/preload.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "bin",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.test.json && tsc --noEmit -p src/bench/page/tsconfig.json",
+    "test:boundary": "node --experimental-strip-types test/boundary.ts",
+    "clean": "rm -rf lib"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "dependencies": {
+    "@deepseek-ai/cordis": "^4.0.2",
+    "@fluvia/core": "workspace:^",
+    "@fluvia/toolbox-default": "workspace:^",
+    "esbuild": "0.28.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/react": "18.3.12",
+    "@types/react-dom": "18.3.1",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "typescript": "^5.7.2"
+  }
+}

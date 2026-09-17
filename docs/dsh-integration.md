@@ -3,7 +3,7 @@
 Fluvia is a standalone CLI, but its whole point is to be driven by an agent —
 and a DeepSeek Harness agent has a turn structure worth respecting. This is how
 the two are wired together: the `fluvia-dsh` notification handler
-(`src/plugins/notify-dsh.ts`) on fluvia's side, a small forwarder plugin on
+(`@fluvia/core/plugins/notify-dsh`) on fluvia's side, a small forwarder plugin on
 dsh's side, and the `fluvia` skill in between so the model knows what to type.
 
 ## Why a dedicated handler
@@ -63,7 +63,7 @@ now runnable
 
 Sections appear only when non-empty, and the order is fixed: **ready → failed →
 skipped → cancelled → now runnable**. Nothing in it is inferred; every line is
-built from a `Notification` (`src/core/types.ts`).
+built from a `Notification` (`@fluvia/core/types`).
 
 The `file` and `http` transports carry that text inside a JSON record, so a
 forwarder can route or filter without parsing prose:

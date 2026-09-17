@@ -1,0 +1,42 @@
+{
+  "name": "@fluvia/toolbox-default",
+  "version": "0.0.1-alpha.1",
+  "description": "The default fluvia toolbox: a deterministic GPU-kernel pipeline with realistic latencies and failures",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Myriad-Dreamin/fluvia.git",
+    "directory": "packages/toolbox-default"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "clean": "rm -rf lib"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "dependencies": {
+    "@fluvia/core": "workspace:^"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.2"
+  }
+}

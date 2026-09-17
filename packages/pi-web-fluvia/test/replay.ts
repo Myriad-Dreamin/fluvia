@@ -15,7 +15,7 @@
 import { readFileSync } from 'node:fs'
 import { Agent } from '@mariozechner/pi-agent-core'
 import type { AgentMessage } from '@mariozechner/pi-agent-core'
-import toolbox from '../../../src/toolbox/default.ts'
+import toolbox from '@fluvia/toolbox-default'
 import { convertToLlmNode } from '../src/messages.ts'
 import { messageText, parseRecord } from '../src/record.ts'
 import { Replay } from '../src/replay.ts'

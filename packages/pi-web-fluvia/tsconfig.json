@@ -11,8 +11,7 @@
     "allowImportingTsExtensions": true,
     "experimentalDecorators": true,
     "useDefineForClassFields": false,
-    "noUnusedLocals": true,
-    "paths": { "node:fs": ["./src/shims/node.ts"], "node:path": ["./src/shims/node.ts"], "node:url": ["./src/shims/node.ts"] }
+    "noUnusedLocals": true
   },
   "include": ["src/**/*.ts", "src/vite-env.d.ts"]
 }

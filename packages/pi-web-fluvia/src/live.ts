@@ -12,11 +12,11 @@
  */
 
 import type { Agent, AgentTool } from '@mariozechner/pi-agent-core'
-import type { CallRecord, FunctionDef, Notification } from '../../../src/core/types.ts'
-import { dispatchLine } from '../../../src/core/dispatch.ts'
-import type { IsaEntry, ServerFrame } from '../../../src/server/protocol.ts'
-import { createRuntime, wallClock } from '../../../src/bench/runtime.ts'
-import type { MemoryRuntime } from '../../../src/bench/runtime.ts'
+import type { CallRecord, FunctionDef, Notification } from '@fluvia/core/types'
+import { dispatchLine } from '@fluvia/core/dispatch'
+import type { IsaEntry, ServerFrame } from '@fluvia/core/protocol'
+import { createRuntime, wallClock } from '@fluvia/core/bench/runtime'
+import type { MemoryRuntime } from '@fluvia/core/bench/runtime'
 import { Coalescer } from './coalesce.ts'
 import { deliverToAgent } from './deliver.ts'
 import { isaFromToolbox, renderAnswer, renderSystemPrompt } from './describe.ts'

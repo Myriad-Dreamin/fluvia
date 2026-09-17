@@ -6,8 +6,8 @@
  * @module pi-web-fluvia/describe
  */
 
-import type { FunctionDef } from '../../../src/core/types.ts'
-import type { IsaEntry, ServerFrame } from '../../../src/server/protocol.ts'
+import type { FunctionDef } from '@fluvia/core/types'
+import type { IsaEntry, ServerFrame } from '@fluvia/core/protocol'
 
 /** Instructions listed before the prompt stops enumerating. */
 const ISA_BUDGET = 40

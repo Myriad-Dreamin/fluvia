@@ -15,11 +15,11 @@
  */
 
 import type { Agent, AgentTool } from '@mariozechner/pi-agent-core'
-import type { FunctionDef, TraceEvent } from '../../../src/core/types.ts'
-import { SliceSession } from '../../../src/bench/session.ts'
-import type { SliceReport } from '../../../src/bench/session.ts'
-import { indexTrace } from '../../../src/bench/slice.ts'
-import type { IndexedTrace } from '../../../src/bench/slice.ts'
+import type { FunctionDef, TraceEvent } from '@fluvia/core/types'
+import { SliceSession } from '@fluvia/core/bench/session'
+import type { SliceReport } from '@fluvia/core/bench/session'
+import { indexTrace } from '@fluvia/core/bench/slice'
+import type { IndexedTrace } from '@fluvia/core/bench/slice'
 import { isaFromToolbox, renderSystemPrompt } from './describe.ts'
 import type { FluviaNotifyMessage } from './messages.ts'
 import { renderNotifyBlock } from './render.ts'

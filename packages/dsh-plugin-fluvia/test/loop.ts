@@ -9,7 +9,7 @@
  *
  * What it is really testing is the boundary. Two sessions share one runtime;
  * each must see its own results and nothing of the other's, and neither may
- * reach past the socket. It needs the fluvia repository (it spawns the real
+ * reach past the socket. It needs a built `@fluvia/cli` (it spawns the real
  * server) but no harness, no model and no credentials.
  *
  * Run: `node --experimental-strip-types test/loop.ts`.
@@ -20,7 +20,6 @@
 import { strict as assert } from 'node:assert'
 import { spawn, type ChildProcess } from 'node:child_process'
 import { rmSync } from 'node:fs'
-import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { setTimeout as delay } from 'node:timers/promises'
 import type { UserMessage } from '@deepseek-ai/dsh-llm'
@@ -49,8 +48,8 @@ const BYSTANDER = 's-loop-bystander'
  */
 const SOCKET = `/tmp/fluvia-plugin-loop-${process.pid}.sock`
 
-/** The fluvia repo: this package lives at `<repo>/packages/dsh-plugin-fluvia/test`. */
-const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..')
+/** The `fluvia` executable, resolved through the dependency rather than PATH. */
+const FLUVIA = fileURLToPath(import.meta.resolve('@fluvia/cli/package.json')).replace(/package\.json$/, 'bin/fluvia.js')
 
 const logged: string[] = []
 const log: CourierLog = {
@@ -107,13 +106,13 @@ async function until(predicate: () => boolean, what: string, budgetMs = 30_000):
   throw new Error(`timed out waiting for ${what}\n--- log ---\n${logged.join('\n')}`)
 }
 
-/** Start `pnpm serve` and wait until its socket answers. */
+/** Start `fluvia serve` and wait until its socket answers. */
 async function startRuntime(): Promise<ChildProcess> {
   rmSync(SOCKET, { force: true })
   const child = spawn(
     process.execPath,
-    ['--import', 'tsx', 'src/server/bin.ts', '--listen', `unix:${SOCKET}`, '--concurrency', '4'],
-    { cwd: REPO, stdio: ['ignore', 'pipe', 'pipe'] },
+    [FLUVIA, 'serve', '--listen', `unix:${SOCKET}`, '--concurrency', '4'],
+    { stdio: ['ignore', 'pipe', 'pipe'] },
   )
   let output = ''
   child.stdout?.setEncoding('utf8')

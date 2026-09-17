@@ -1,41 +1,32 @@
 {
   "name": "fluvia",
-  "version": "0.1.0",
+  "version": "0.0.1-alpha.1",
   "private": true,
   "description": "Fully-async dataflow CLI: JS-syntax calls, resource handles, and completion notifications for LLM agents",
   "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Myriad-Dreamin/fluvia.git"
+  },
   "engines": {
-    "node": "^22.19.0 || >=24.0.0"
+    "node": ">=24"
   },
   "scripts": {
-    "cli": "tsx src/cli/bin.ts",
-    "serve": "tsx src/server/bin.ts",
-    "connect": "tsx src/client/bin.ts",
-    "demo": "tsx src/demo/run.ts",
-    "demo-perf": "tsx src/perf/bin.ts",
-    "dsh-inbox": "tsx src/dsh-inbox/bin.ts",
-    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p src/bench/page/tsconfig.json",
-    "test:boundary": "tsx test/boundary.ts",
-    "bench": "tsx src/bench/bin.ts",
-    "bench:page": "tsx src/bench/page/build.ts"
-  },
-  "dependencies": {
-    "@deepseek-ai/cordis": "^4.0.2",
-    "acorn": "^8.14.0"
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "cli": "node packages/cli/bin/fluvia.js cli",
+    "serve": "node packages/cli/bin/fluvia.js serve",
+    "connect": "node packages/cli/bin/fluvia.js connect",
+    "demo": "node packages/cli/bin/fluvia.js demo",
+    "demo-perf": "node packages/cli/bin/fluvia.js perf",
+    "dsh-inbox": "node packages/cli/bin/fluvia.js dsh-inbox",
+    "bench": "node packages/cli/bin/fluvia.js bench",
+    "bench:page": "node packages/cli/bin/fluvia.js bench-page",
+    "test": "pnpm test:boundary && pnpm --filter dsh-plugin-fluvia verify && pnpm --filter pi-web-fluvia verify",
+    "test:boundary": "pnpm --filter @fluvia/cli test:boundary"
   },
   "devDependencies": {
-    "@types/node": "^22.10.0",
-    "@types/react": "18.3.12",
-    "@types/react-dom": "18.3.1",
-    "esbuild": "0.28.2",
-    "react": "18.3.1",
-    "react-dom": "18.3.1",
-    "tsx": "^4.19.2",
-    "typescript": "^5.7.2"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "esbuild"
-    ]
+    "@fluvia/cli": "workspace:^"
   }
 }

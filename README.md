@@ -59,9 +59,9 @@ around it.
 
 ```sh
 # outside the sandbox: the instruction set and the work
-pnpm serve --listen unix:/run/fluvia.sock --preload src/toolbox/default.ts --trace out/serve.jsonl.gz
+fluvia serve --listen unix:/run/fluvia.sock --preload @fluvia/toolbox-default --trace out/serve.jsonl.gz
 # inside it: a client that can only ask
-pnpm connect --connect unix:/run/fluvia.sock --label planner
+fluvia connect --connect unix:/run/fluvia.sock --label planner
 ```
 
 Full contract: **[docs/PROTOCOL.md](docs/PROTOCOL.md)**. What the boundary is
@@ -70,14 +70,14 @@ worth, and what it is not: **[docs/THREAT-MODEL.md](docs/THREAT-MODEL.md)**
 
 ## Quickstart
 
-> **Node >= 22 is required** (`^22.19.0 || >=24.0.0`) — the scripts run the
-> TypeScript sources directly through `tsx`, with no build step, and the runtime
-> uses the global `fetch` and modern `AbortSignal` APIs. On this machine `pnpm`
-> comes from corepack on node v24:
+> **Node >= 24 is required** — the packages are compiled with `tsc` before they
+> run, and the runtime uses the global `fetch` and modern `AbortSignal` APIs. On
+> this machine `pnpm` comes from corepack on node v24:
 > `export PATH="$HOME/.nvm/versions/node/v24.12.0/bin:$PATH"`.
 
 ```sh
 pnpm install
+pnpm build       # compile every package to lib/, in dependency order
 pnpm demo        # drive the CLI as a scripted pair of agents → out/<session>.jsonl.gz
 pnpm demo-perf   # render the newest trace to out/perf.html and serve it
 pnpm dsh-inbox   # optional: receive `fluvia-dsh` envelopes over http and watch them live
@@ -106,9 +106,9 @@ pnpm cli --notify dsh --trace out/session.jsonl.gz
 ## CLI
 
 ```
-tsx src/cli/bin.ts [options]
+fluvia cli [options]
   --agent <id>         default agent for unprefixed lines (default: a0)
-  --preload <path>     toolbox module, repeatable (default: src/toolbox/default.ts)
+  --preload <path>     toolbox module, repeatable (default: @fluvia/toolbox-default)
   --trace <file>       write the gzip JSONL trace (default: none)
   --concurrency <n>    max simultaneously running calls (default: 4)
   --notify <spec>      sink, repeatable (default: stdout)
@@ -125,7 +125,7 @@ Sink specs: `stdout`, `file:<path>`, `dsh`, `dsh:stdout`, `dsh:file:<path>`,
 
 A raw sink interrupts an agent turn once per settled call, which wrecks an
 agent's attention when eight calls land in the same second. `fluvia-dsh`
-(`src/plugins/notify-dsh.ts`) coalesces notifications inside a short sliding
+(`@fluvia/core/plugins/notify-dsh`) coalesces notifications inside a short sliding
 window, splits them per agent, ranks them by what is now actionable, and renders
 **one** envelope:
 
@@ -167,7 +167,7 @@ than values, cancel work you no longer need). It works unchanged in dsh
 
 ## Benchmark slices
 
-A recorded trace doubles as a benchmark. `src/bench/` cuts it at a line,
+A recorded trace doubles as a benchmark. `@fluvia/core/bench` cuts it at a line,
 restores a fresh runtime to the moment before that line on a virtual clock, and
 continues the slice one of two ways:
 
@@ -190,9 +190,9 @@ pnpm bench:page   # builds out/bench-page/index.html, the interactive demo of bo
 ## The trace
 
 `--trace out/<session>.jsonl.gz` writes a gzip JSONL stream, one event per line,
-schema in `src/core/types.ts` (`TraceEvent`). The first line is always
+schema in `@fluvia/core/types` (`TraceEvent`). The first line is always
 `session.start` carrying the `TraceMeta` header; read it back with `readTrace()`
-from `src/core/trace.ts`.
+from `@fluvia/core/trace`.
 
 Events: `session.start`, `agent.join`, `agent.input`, `cli.output`,
 `call.submit`, `call.queued`, `call.start`, `call.progress`, `call.settle`,
@@ -206,18 +206,14 @@ so the perf report always has a readable transcript alongside the timings.
 
 ## Layout
 
-| directory | concern |
+| package | concern |
 | --- | --- |
-| `src/server/` | `pnpm serve`: the runtime on the far side of the boundary — wire protocol, per-connection identity, admission and limits |
-| `src/client/` | `pnpm connect`: the thin, untrusted client and its REPL |
-| `src/core/` | the contract everything agrees on: `types.ts` (call, handle, notification, trace), `parser.ts` (one line → one call), `describe.ts` (values → type + summary), `trace.ts` (gzip JSONL writer and reader) |
-| `src/plugins/` | one cordis plugin per concern: `registry` (loaded functions), `env` (handle bindings, shared by every agent in the runtime), `scheduler` (dependency resolution, concurrency, cancellation, skip cascade), `notify` (the hub), `notify-dsh` (the dsh handler), `inspect` (the control calls) |
-| `src/cli/` | the agent-facing surface: `bin.ts` (composition and flags), `session.ts` (the read–submit–answer loop), `format.ts` (every string an agent reads), `sinks.ts` (`--notify` wiring) |
-| `src/toolbox/` | preloadable `FunctionDef`s — the default toolbox is a deterministic GPU-kernel pipeline with realistic latencies and failures |
-| `src/demo/` | `pnpm demo`: spawns the CLI and drives it as two agents over the NDJSON protocol |
-| `src/dsh-inbox/` | `pnpm dsh-inbox`: a standalone receiving end of `dsh:http:<url>` — stores envelopes and serves a live watch page, for watching the notification side without running dsh |
+| `packages/core/` | **`@fluvia/core`** — the runtime, in Node and in the browser alike: `types.ts` (call, handle, notification, trace), `parser.ts` (one line → one call), `dispatch.ts` (the one path every line takes), `describe.ts` (values → type + summary), `trace.ts` (gzip JSONL writer and reader), `protocol.ts` (the wire types), `format.ts` (every string an agent reads), `session.ts` (the read–submit–answer loop) |
+| `packages/core/src/plugins/` | one cordis plugin per concern: `registry` (the functions an agent may call), `env` (handle bindings, shared by every agent in the runtime), `scheduler` (dependency resolution, concurrency, cancellation, skip cascade), `notify` (the hub), `notify-dsh` (the dsh handler), `inspect` (the control calls) |
+| `packages/core/src/bench/` | `fluvia bench`: trace slicing, the virtual clock, an in-memory runtime, and agent takeover |
+| `packages/cli/` | **`@fluvia/cli`** — the `fluvia` executable: `cli/` (the REPL and `--notify` wiring), `server/` (`fluvia serve`: the runtime on the far side of the boundary — wire protocol, per-connection identity, admission and limits), `client/` (`fluvia connect`: the thin, untrusted client and its REPL), `demo/` (drives the CLI as two agents over the NDJSON protocol), `perf/` (trace → model → self-contained HTML report, plus the local server), `dsh-inbox/` (a standalone receiving end of `dsh:http:<url>`), `bench/` (the slice commands and the demo page in `page/`), `preload.ts` (module specifier → registered functions) |
+| `packages/toolbox-default/` | **`@fluvia/toolbox-default`** — the toolbox loaded when `--preload` is not given: a deterministic GPU-kernel pipeline with realistic latencies and failures |
 | `packages/dsh-plugin-fluvia/` | the real dsh plugin: receives the same envelopes inside a dsh process and delivers them into an agent turn, so they land in the dsh Web UI ([docs/dsh-ui.md](docs/dsh-ui.md)) |
-| `src/bench/` | `pnpm bench`: trace slicing, virtual-clock replay, agent takeover, and the demo page in `page/` |
-| `src/perf/` | `pnpm demo-perf`: trace → model → self-contained HTML report, plus the local server |
+| `packages/pi-web-fluvia/` | a pi agent driving `@fluvia/core` entirely in the browser: a live in-page runtime, or a benchmark slice resumed from a recording |
 | `skills/fluvia/` | the agent-facing skill |
 | `docs/` | the protocol and the dsh integration guide |

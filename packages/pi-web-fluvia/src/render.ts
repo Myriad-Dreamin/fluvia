@@ -10,7 +10,7 @@
  * @module pi-web-fluvia/render
  */
 
-import type { Notification } from '../../../src/core/types.ts'
+import type { Notification } from '@fluvia/core/types'
 
 const RANK: Record<string, number> = { done: 0, failed: 1, skipped: 2, cancelled: 3 }
 

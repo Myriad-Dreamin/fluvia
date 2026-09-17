@@ -8,7 +8,7 @@
 
 import type { AgentTool } from '@mariozechner/pi-agent-core'
 import { Type } from '@mariozechner/pi-ai'
-import type { IsaEntry } from '../../../src/server/protocol.ts'
+import type { IsaEntry } from '@fluvia/core/protocol'
 import { renderToolDescription } from './describe.ts'
 
 const parameters = Type.Object({
