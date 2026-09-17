@@ -37,7 +37,7 @@ import { Replay } from '../src/replay.ts'
 const here = dirname(fileURLToPath(import.meta.url))
 const pkg = resolve(here, '..')
 const repo = resolve(pkg, '../..')
-const TRACE = join(repo, 'out/s-20260915-223018.jsonl.gz')
+const TRACE = join(repo, 'packages/toolbox-default/traces/demo.jsonl.gz')
 const PREPARE = 'prepareKernel({ size: 4096, dtype: "f32", arch: "sm90" })'
 
 const cleanups: (() => void | Promise<void>)[] = []
