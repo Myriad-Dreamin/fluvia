@@ -29,5 +29,6 @@
   },
   "devDependencies": {
     "@fluvia/cli": "workspace:^"
-  }
+  },
+  "packageManager": "pnpm@12.4.2"
 }
