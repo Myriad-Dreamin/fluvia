@@ -3,7 +3,7 @@
   "version": "0.0.1-alpha.1",
   "description": "The fluvia runtime: call parsing, dataflow scheduling, handles, notifications, traces and the benchmark slice engine",
   "type": "module",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Myriad-Dreamin/fluvia.git",
@@ -102,7 +102,9 @@
   },
   "files": [
     "lib",
-    "README.md"
+    "README.md",
+    "LICENSE",
+    "NOTICE"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",

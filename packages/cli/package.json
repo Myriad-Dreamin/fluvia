@@ -3,7 +3,7 @@
   "version": "0.0.1-alpha.1",
   "description": "The fluvia command line: the REPL, the out-of-sandbox runtime and its client, the demo, the perf report and the slice bench",
   "type": "module",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Myriad-Dreamin/fluvia.git",
@@ -33,7 +33,9 @@
   "files": [
     "lib",
     "bin",
-    "README.md"
+    "README.md",
+    "LICENSE",
+    "NOTICE"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",

@@ -4,7 +4,7 @@
   "private": true,
   "description": "Fully-async dataflow CLI: JS-syntax calls, resource handles, and completion notifications for LLM agents",
   "type": "module",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Myriad-Dreamin/fluvia.git"

@@ -20,4 +20,4 @@ own smoke test:
 fluvia bench node_modules/@fluvia/toolbox-default
 ```
 
-MIT © 2026 Myriad-Dreamin
+Apache-2.0 © 2026 Myriad-Dreamin

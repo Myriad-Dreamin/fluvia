@@ -26,7 +26,7 @@
     "verify:unit": "node --experimental-strip-types test/verify.ts",
     "verify:loop": "node --experimental-strip-types test/loop.ts"
   },
-  "license": "MIT",
+  "license": "Apache-2.0",
   "engines": {
     "node": ">=24"
   },

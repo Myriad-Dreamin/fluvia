@@ -40,4 +40,4 @@ import { createRuntime } from '@fluvia/core/bench/runtime'
 Turning a module specifier into registered functions lives in
 [`@fluvia/cli`](https://www.npmjs.com/package/@fluvia/cli), not here.
 
-MIT © 2026 Myriad-Dreamin
+Apache-2.0 © 2026 Myriad-Dreamin

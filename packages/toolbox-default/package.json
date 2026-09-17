@@ -3,7 +3,7 @@
   "version": "0.0.1-alpha.1",
   "description": "The default fluvia toolbox: a deterministic GPU-kernel pipeline with realistic latencies and failures",
   "type": "module",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Myriad-Dreamin/fluvia.git",
@@ -28,7 +28,9 @@
     "lib",
     "bench",
     "traces",
-    "README.md"
+    "README.md",
+    "LICENSE",
+    "NOTICE"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",

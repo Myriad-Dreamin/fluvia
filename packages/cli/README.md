@@ -25,4 +25,4 @@ Each command takes `--help`.
 unless `--preload <module>` says otherwise; that flag is the whole instruction
 set, and it is not reachable over the wire.
 
-MIT © 2026 Myriad-Dreamin
+Apache-2.0 © 2026 Myriad-Dreamin
