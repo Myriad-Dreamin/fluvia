@@ -175,6 +175,65 @@ export interface CallContext {
   sleep(ms: number): Promise<void>
   /** Resolve a handle argument that the implementation wants to inspect further. */
   runtime: RuntimeFacade
+  /**
+   * Start a supervised child process on behalf of this call. Resolves once the
+   * child has spawned, not when it exits: the call may settle with the returned
+   * {@link ProcessInfo} while the child keeps running. When the child exits the
+   * runtime publishes a `processExited` notification to the same agent.
+   */
+  spawn(request: SpawnRequest): Promise<ProcessInfo>
+}
+
+/** What an implementation asks the process supervisor to run. */
+export interface SpawnRequest {
+  /** Executable, resolved through `PATH`. Never run through a shell by the supervisor. */
+  command: string
+  /** Arguments, passed verbatim. */
+  args?: string[]
+  /** Working directory; defaults to the runtime's. */
+  cwd?: string
+}
+
+/**
+ * A supervised child process, as the handle a call returns. The two log paths
+ * exist from the moment the process spawns and grow while it runs, so later
+ * calls can read them before it exits.
+ */
+export interface ProcessInfo extends TaggedValue {
+  $type: 'Process'
+  $summary: string
+  /** Supervisor-assigned id, e.g. `p0`. */
+  id: string
+  /** OS process id. */
+  pid: number
+  /** The call that spawned it. */
+  call: string
+  /** `command args…`, for display. */
+  command: string
+  /** File the child's stdout is written to. */
+  stdout: string
+  /** File the child's stderr is written to. */
+  stderr: string
+}
+
+/** How a supervised process ended. */
+export interface ProcessExit {
+  /** Supervisor id, matching {@link ProcessInfo.id}. */
+  id: string
+  pid: number
+  command: string
+  /** Exit code, or `null` when a signal ended it. */
+  code: number | null
+  /** Terminating signal, or `null` for a normal exit. */
+  signal: string | null
+  /** File the child's stdout was written to. */
+  stdout: string
+  /** File the child's stderr was written to. */
+  stderr: string
+  /** Bytes written to each log. */
+  bytes: { stdout: number; stderr: number }
+  /** Spawn-to-exit wall time. */
+  runMs: number
 }
 
 /** The slice of the runtime an implementation or a sink may read. */
@@ -207,6 +266,16 @@ export interface AgentRecord {
 export interface Notification {
   /** Stable notification id, e.g. `n4`. */
   id: string
+  /**
+   * What happened. `callSettled` is the original notice; `processExited` is
+   * pushed when a child spawned by {@link Notification.call} exits, long after
+   * that call settled. A process notice still fills the call-shaped fields —
+   * `outcome` is `done` for exit code 0 and `failed` otherwise — so a consumer
+   * that only knows `callSettled` degrades to a readable line.
+   */
+  event: 'callSettled' | 'processExited'
+  /** Exit detail, present exactly when `event === 'processExited'`. */
+  process?: ProcessExit
   /** When the call settled. */
   at: RelMillis
   /** The agent to notify — the one that submitted the call. */
@@ -330,7 +399,9 @@ export type TraceEvent = TraceEventBase &
         type?: string
         summary?: string
       }
-    | { k: 'notify.emit'; id: string; call: string; agent: string; outcome: CallOutcome }
+    | { k: 'process.spawn'; id: string; call: string; pid: number; command: string; stdout: string; stderr: string }
+    | { k: 'process.exit'; id: string; call: string; code: number | null; signal: string | null; runMs: number }
+    | { k: 'notify.emit'; id: string; call: string; agent: string; outcome: CallOutcome; event?: Notification['event'] }
     | { k: 'notify.deliver'; id: string[]; sink: string; agent: string; latencyMs: number; bytes: number }
     | { k: 'session.end'; reason: string; stats: SessionStats }
   )

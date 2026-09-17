@@ -18,7 +18,16 @@
 
 import { Context, Service } from '@deepseek-ai/cordis'
 import { FluviaError } from '../core/types.ts'
-import type { ArgNode, CallOutcome, CallRecord, DepRef, FunctionDef, RuntimeFacade, SkipReason } from '../core/types.ts'
+import type {
+  ArgNode,
+  CallOutcome,
+  CallRecord,
+  DepRef,
+  FunctionDef,
+  RuntimeFacade,
+  SkipReason,
+  SpawnRequest,
+} from '../core/types.ts'
 import type { RawArg, ParsedLine } from '../core/parser.ts'
 import type { Tracer } from '../core/trace.ts'
 import { describe, toCallError } from '../core/describe.ts'
@@ -57,7 +66,7 @@ interface Execution {
 }
 
 export class Scheduler extends Service {
-  static inject = ['functions', 'env', 'notify']
+  static inject = ['functions', 'env', 'notify', 'processes']
 
   private readonly records = new Map<string, CallRecord>()
   private readonly queue: CallRecord[] = []
@@ -274,6 +283,7 @@ export class Scheduler extends Service {
       },
       sleep: (ms: number) => sleep(ms, controller.signal),
       runtime: this.facade,
+      spawn: (request: SpawnRequest) => this.ctx.processes.spawn(call, request),
     }
 
     let args: Record<string, unknown>

@@ -13,7 +13,7 @@
  */
 
 import { Context, Service } from '@deepseek-ai/cordis'
-import type { CallRecord, Notification, NotificationSink } from '../core/types.ts'
+import type { CallRecord, Notification, NotificationSink, ProcessExit } from '../core/types.ts'
 import type { Tracer } from '../core/trace.ts'
 import { renderNotificationText } from '../cli/format.ts'
 
@@ -72,6 +72,7 @@ export class NotifyHub extends Service {
     const notification: Notification = {
       id,
       at,
+      event: 'callSettled',
       agent: call.agent,
       call: call.id,
       fn: call.fn,
@@ -84,11 +85,61 @@ export class NotifyHub extends Service {
       unblocked,
       text: '',
     }
+    return this.fanOut(notification)
+  }
+
+  /**
+   * Build and fan out the `processExited` notice for a child that `call`
+   * spawned. The call itself settled long ago; this reaches the same agent, and
+   * names the call's value handle so the agent can tie it back to `process<n>`.
+   */
+  publishProcessExit(call: CallRecord, exit: ProcessExit): Notification {
+    const ok = exit.code === 0
+    const status = exit.signal ? `killed by ${exit.signal}` : `exit code ${exit.code}`
+    const notification: Notification = {
+      id: `n${this.next++}`,
+      at: this.tracer.now(),
+      event: 'processExited',
+      process: exit,
+      agent: call.agent,
+      call: call.id,
+      fn: 'processExited',
+      outcome: ok ? 'done' : 'failed',
+      bind: call.bind,
+      ready: {
+        name: call.bind.value,
+        kind: 'value',
+        type: 'Process',
+        summary: `${exit.id} ${status} · stdout ${exit.stdout} · stderr ${exit.stderr}`,
+      },
+      error: ok
+        ? undefined
+        : {
+            kind: 'ProcessExited',
+            message: `${exit.command}: ${status}`,
+            detail: { stdout: exit.stdout, stderr: exit.stderr },
+          },
+      timing: { waitedMs: 0, runMs: exit.runMs, totalMs: exit.runMs },
+      unblocked: [],
+      text: '',
+    }
+    return this.fanOut(notification)
+  }
+
+  /** Record a built notification, trace it and hand it to every sink. */
+  private fanOut(notification: Notification): Notification {
+    const { id, at, call } = notification
     notification.text = renderNotificationText(notification)
     this.emittedAt.set(id, at)
     this.history.push(notification)
     this.byId.set(id, notification)
-    this.tracer.emit('notify.emit', { id, call: call.id, agent: call.agent, outcome: notification.outcome })
+    this.tracer.emit('notify.emit', {
+      id,
+      call,
+      agent: notification.agent,
+      outcome: notification.outcome,
+      event: notification.event,
+    })
 
     for (const sink of this.sinks) {
       const task = Promise.resolve()
@@ -105,7 +156,7 @@ export class NotifyHub extends Service {
           },
           (error: Error) => {
             this.tracer.emit('cli.output', {
-              agent: call.agent,
+              agent: notification.agent,
               level: 'error',
               text: `sink ${sink.name} failed: ${error.message}`,
             })

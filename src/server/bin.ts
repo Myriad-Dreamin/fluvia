@@ -19,6 +19,8 @@
 import { createServer } from 'node:net'
 import { chmodSync, mkdirSync, readFileSync, rmSync } from 'node:fs'
 import { dirname } from 'node:path'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { parseArgs } from 'node:util'
 import { fileURLToPath } from 'node:url'
 import { Context } from '@deepseek-ai/cordis'
@@ -29,6 +31,7 @@ import { Environment } from '../plugins/env.ts'
 import type { HandleScope } from '../plugins/env.ts'
 import { NotifyHub } from '../plugins/notify.ts'
 import { Scheduler, isTerminal } from '../plugins/scheduler.ts'
+import { ProcessSupervisor } from '../plugins/processes.ts'
 import { controlFunctions } from '../plugins/inspect.ts'
 import { AgentNamer, Connection } from './connection.ts'
 import type { ConnectionPolicy } from './connection.ts'
@@ -41,6 +44,7 @@ const { values } = parseArgs({
     concurrency: { type: 'string', default: '4' },
     trace: { type: 'string' },
     session: { type: 'string' },
+    'proc-dir': { type: 'string' },
     'token-file': { type: 'string' },
     scope: { type: 'string', default: 'agent' },
     'max-connections': { type: 'string', default: '32' },
@@ -61,6 +65,7 @@ if (values.help) {
       '  --preload <module>       toolbox module, repeatable; this IS the instruction set',
       '  --concurrency <n>        implementations running at once, shared by every agent',
       '  --trace <file>           gzip JSONL trace, written host-side',
+      '  --proc-dir <dir>         stdout/stderr logs of spawned processes (default <tmpdir>/fluvia/<session>)',
       '  --token-file <path>      shared secret a client must present (mandatory for tcp:)',
       '  --scope agent|runtime    handle namespace per agent (default) or shared',
       '  --max-connections <n>    live connections (default 32)',
@@ -93,8 +98,9 @@ const ctx = new Context()
 await ctx.plugin(FunctionRegistry)
 await ctx.plugin(Environment, { tracer, scope })
 await ctx.plugin(NotifyHub, tracer)
+await ctx.plugin(ProcessSupervisor, { tracer, dir: values['proc-dir'] ?? join(tmpdir(), 'fluvia', sessionId) })
 await ctx.plugin(Scheduler, { tracer, concurrency })
-await ctx.inject(['functions', 'env', 'notify', 'calls'], () => {})
+await ctx.inject(['functions', 'env', 'notify', 'processes', 'calls'], () => {})
 
 ctx.functions.registerAll(controlFunctions(ctx))
 const DEFAULT_TOOLBOX = fileURLToPath(new URL('../toolbox/default.ts', import.meta.url))
@@ -193,6 +199,8 @@ async function shutdown(reason: string): Promise<void> {
   server.close()
   ctx.calls.abortAll('server shutting down')
   await ctx.calls.drain()
+  ctx.processes.killAll()
+  await ctx.processes.drain()
   await ctx.notify.close()
   tracer.emit('session.end', { reason, stats: collectStats() })
   await tracer.close()

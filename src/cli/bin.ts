@@ -7,13 +7,15 @@
  * Usage:
  *   tsx src/cli/bin.ts [--agent a0] [--preload <module>] [--trace <file.jsonl.gz>]
  *                      [--concurrency 4] [--notify stdout|file:<p>|dsh[:…]]
- *                      [--script <file>] [--json] [--quiet]
+ *                      [--script <file>] [--proc-dir <dir>] [--json] [--quiet]
  *
  * @module fluvia/cli/bin
  */
 
 import { createInterface } from 'node:readline'
 import { readFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { parseArgs } from 'node:util'
 import { fileURLToPath } from 'node:url'
 import { Context } from '@deepseek-ai/cordis'
@@ -23,6 +25,7 @@ import { FunctionRegistry } from '../plugins/registry.ts'
 import { Environment } from '../plugins/env.ts'
 import { NotifyHub } from '../plugins/notify.ts'
 import { Scheduler, isTerminal } from '../plugins/scheduler.ts'
+import { ProcessSupervisor } from '../plugins/processes.ts'
 import { controlFunctions, HELP } from '../plugins/inspect.ts'
 import { CliSession, Output } from './session.ts'
 import { createSink } from './sinks.ts'
@@ -39,6 +42,7 @@ const { values } = parseArgs({
     notify: { type: 'string', multiple: true },
     script: { type: 'string' },
     session: { type: 'string' },
+    'proc-dir': { type: 'string' },
     json: { type: 'boolean', default: false },
     quiet: { type: 'boolean', default: false },
     help: { type: 'boolean', default: false },
@@ -63,10 +67,11 @@ const ctx = new Context()
 await ctx.plugin(FunctionRegistry)
 await ctx.plugin(Environment, { tracer })
 await ctx.plugin(NotifyHub, tracer)
+await ctx.plugin(ProcessSupervisor, { tracer, dir: values['proc-dir'] ?? join(tmpdir(), 'fluvia', sessionId) })
 await ctx.plugin(Scheduler, { tracer, concurrency })
 // Services appear when their fiber starts, which is a microtask after plugin();
 // inject() resolves once every name below is live, so nothing races the input.
-await ctx.inject(['functions', 'env', 'notify', 'calls'], () => {})
+await ctx.inject(['functions', 'env', 'notify', 'processes', 'calls'], () => {})
 
 ctx.functions.registerAll(controlFunctions(ctx))
 
@@ -141,6 +146,11 @@ async function shutdown(reason: string): Promise<void> {
   clearTimeout(timer)
   ctx.calls.abortAll('session closing')
   await ctx.calls.drain()
+  // A spawned process outlives the call that started it, and its exit is a
+  // notification the agent is owed, so it gets the same drain budget.
+  const kill = setTimeout(() => ctx.processes.killAll(), DRAIN_TIMEOUT_MS)
+  await ctx.processes.drain()
+  clearTimeout(kill)
   await ctx.notify.close()
 
   const stats = collectStats()
