@@ -1,0 +1,6 @@
+allowBuilds:
+  esbuild: true
+  "@google/genai": false
+  koffi: false
+  protobufjs: false
+blockExoticSubdeps: false

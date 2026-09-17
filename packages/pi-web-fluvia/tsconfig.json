@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": [],
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "allowImportingTsExtensions": true,
+    "experimentalDecorators": true,
+    "useDefineForClassFields": false,
+    "noUnusedLocals": true,
+    "paths": { "node:fs": ["./src/shims/node.ts"], "node:path": ["./src/shims/node.ts"], "node:url": ["./src/shims/node.ts"] }
+  },
+  "include": ["src/**/*.ts", "src/vite-env.d.ts"]
+}
