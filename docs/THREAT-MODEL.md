@@ -18,7 +18,7 @@ instruction set runs outside it.**
 The model is assumed to be able to do **anything inside the sandbox**: read and
 rewrite files, edit the harness, patch the client, forge frames. So nothing may
 depend on client-side behaviour. Everything below is enforced in
-`src/server/connection.ts` and in the runtime it fronts.
+`@fluvia/cli`'s `server/connection.ts` and in the runtime it fronts.
 
 ## What the boundary enforces
 

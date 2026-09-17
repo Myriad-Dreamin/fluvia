@@ -80,7 +80,7 @@ Control calls answer synchronously and bind no handles.
 ## 4. Two deployments
 
 fluvia runs in one of two shapes, and they share every line of the dispatch
-path (`src/core/dispatch.ts`) so that what a line means never depends on which
+path (`@fluvia/core/dispatch`) so that what a line means never depends on which
 one you chose.
 
 **One trusted operator** — `fluvia cli`. The terminal owns the runtime, loads
@@ -105,7 +105,7 @@ again (while no other connection holds it), so its handles survive the gap;
 the calls that were still running when it dropped are cancelled, because nobody
 was left to read them.
 
-Wire: NDJSON both ways, `src/server/protocol.ts`. Client frames are `hello`,
+Wire: NDJSON both ways, `@fluvia/core/protocol`. Client frames are `hello`,
 `submit` and `bye`; server frames are `welcome` (assigned agent, session, the
 published ISA, the limits), `ack`, `control`, `error`, `result` and `bye`. A
 `submit` carries an `id` the answer echoes, so a notification arriving mid-flight
@@ -114,9 +114,9 @@ can never be mistaken for an answer.
 ## 5. CLI
 
 ```
-tsx src/cli/bin.ts [options]
+fluvia cli [options]
   --agent <id>         default agent for unprefixed lines (default: a0)
-  --preload <path>     toolbox module, repeatable (default: src/toolbox/default.ts)
+  --preload <path>     toolbox module, repeatable (default: @fluvia/toolbox-default)
   --trace <file>       write the gzip JSONL trace (default: none)
   --concurrency <n>    max simultaneously running calls (default: 4)
   --notify <spec>      sink, repeatable (default: stdout)
@@ -149,14 +149,14 @@ transcript.
 
 ## 6. Notifications
 
-A `Notification` (see `src/core/types.ts`) is produced for every terminal call
+A `Notification` (see `@fluvia/core/types`) is produced for every terminal call
 and handed to every registered sink. Sinks are cordis plugins that call
 `ctx.notify.register(sink)`; `ctx.notify` is the hub service.
 
 ### Process exits
 
 A call may start a child process through `cx.spawn()` (the process supervisor,
-`src/plugins/processes.ts`). Such a call settles as soon as the child has
+`@fluvia/core/plugins/processes`). Such a call settles as soon as the child has
 spawned, with a `Process` value: `{ id, pid, call, command, stdout, stderr }`,
 where `stdout` and `stderr` are log files that grow while the child runs. The
 child outlives the call. When it exits, the supervisor publishes a second
@@ -178,7 +178,7 @@ change on exit. The log directory is `--proc-dir`, by default
 `<tmpdir>/fluvia/<session>`. At shutdown the CLI waits for live processes like it
 waits for live calls; `serve` sends them SIGTERM.
 
-`src/toolbox/process.ts` is an opt-in toolbox exposing `exec(command, [args],
+`@fluvia/toolbox-default/process` is an opt-in toolbox exposing `exec(command, [args],
 { cwd })`. It runs whatever the agent names, so it is never preloaded by
 default.
 
@@ -190,8 +190,8 @@ notification dialect.
 ## 7. Trace
 
 `out/<session>.jsonl.gz` — gzip JSONL, one event per line, schema in
-`src/core/types.ts` (`TraceEvent`). First line is always `session.start` with
-the `TraceMeta` header. Read it with `readTrace()` from `src/core/trace.ts`.
+`@fluvia/core/types` (`TraceEvent`). First line is always `session.start` with
+the `TraceMeta` header. Read it with `readTrace()` from `@fluvia/core/trace`.
 
 Events: `session.start`, `agent.join`, `agent.input`, `cli.output`,
 `call.submit`, `call.queued`, `call.start`, `call.progress`, `call.settle`,

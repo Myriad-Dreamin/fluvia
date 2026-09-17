@@ -1,0 +1,36 @@
+{
+  "name": "pi-web-fluvia",
+  "version": "0.0.1-alpha.1",
+  "private": true,
+  "description": "pi agent (pi-web-ui) driving fluvia entirely in the browser: a live in-page runtime, or a benchmark slice resumed from a recording",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit -p tsconfig.json && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json",
+    "demo-trace": "cd ../.. && pnpm slice export --trace out/s-20260915-223018.jsonl.gz --out packages/pi-web-fluvia/public/demo-trace.json",
+    "verify": "tsx test/verify.ts",
+    "replay": "tsx test/replay.ts"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "dependencies": {
+    "@fluvia/core": "workspace:^",
+    "@fluvia/toolbox-default": "workspace:^",
+    "@mariozechner/mini-lit": "^0.2.1",
+    "@mariozechner/pi-agent-core": "0.73.1",
+    "@mariozechner/pi-ai": "0.73.1",
+    "@mariozechner/pi-web-ui": "0.73.1",
+    "@opentelemetry/api": "^1.9.1",
+    "lit": "^3.3.1",
+    "typebox": "^1.1.24"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vite": "^7.1.6"
+  }
+}

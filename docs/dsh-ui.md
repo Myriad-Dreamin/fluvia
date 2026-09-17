@@ -73,7 +73,7 @@ It prints what it published:
 fluvia serve — session srv-20260916073220
   listening   unix:/tmp/fluvia-dsh-e2e.sock
   instruction set  11 functions: benchmark, compileKernel, explain, flakyProbe, …
-  preloaded   /home/kamiyoru/work/ts/fluvia/src/toolbox/default.ts
+  preloaded   @fluvia/toolbox-default
   concurrency 4 · handle scope agent · 32 in flight/agent · 20/s
 ```
 

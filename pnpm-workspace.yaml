@@ -1,2 +1,13 @@
+packages:
+  - packages/*
+
+# esbuild bundles the slice-bench page; the rest are declined by pi-web-ui's
+# transitive dependencies, which do not need them to run in a browser.
 allowBuilds:
   esbuild: true
+  "@google/genai": false
+  koffi: false
+  protobufjs: false
+
+# pi-web-ui pulls `xlsx` from a cdn.sheetjs.com tarball rather than the registry.
+blockExoticSubdeps: false

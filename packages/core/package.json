@@ -1,0 +1,125 @@
+{
+  "name": "@fluvia/core",
+  "version": "0.0.1-alpha.1",
+  "description": "The fluvia runtime: call parsing, dataflow scheduling, handles, notifications, traces and the benchmark slice engine",
+  "type": "module",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Myriad-Dreamin/fluvia.git",
+    "directory": "packages/core"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "sideEffects": false,
+  "exports": {
+    "./types": {
+      "types": "./lib/types.d.ts",
+      "default": "./lib/types.js"
+    },
+    "./parser": {
+      "types": "./lib/parser.d.ts",
+      "default": "./lib/parser.js"
+    },
+    "./dispatch": {
+      "types": "./lib/dispatch.d.ts",
+      "default": "./lib/dispatch.js"
+    },
+    "./describe": {
+      "types": "./lib/describe.d.ts",
+      "default": "./lib/describe.js"
+    },
+    "./trace": {
+      "types": "./lib/trace.d.ts",
+      "default": "./lib/trace.js"
+    },
+    "./protocol": {
+      "types": "./lib/protocol.d.ts",
+      "default": "./lib/protocol.js"
+    },
+    "./format": {
+      "types": "./lib/format.d.ts",
+      "default": "./lib/format.js"
+    },
+    "./session": {
+      "types": "./lib/session.d.ts",
+      "default": "./lib/session.js"
+    },
+    "./plugins/registry": {
+      "types": "./lib/plugins/registry.d.ts",
+      "default": "./lib/plugins/registry.js"
+    },
+    "./plugins/env": {
+      "types": "./lib/plugins/env.d.ts",
+      "default": "./lib/plugins/env.js"
+    },
+    "./plugins/scheduler": {
+      "types": "./lib/plugins/scheduler.d.ts",
+      "default": "./lib/plugins/scheduler.js"
+    },
+    "./plugins/notify": {
+      "types": "./lib/plugins/notify.d.ts",
+      "default": "./lib/plugins/notify.js"
+    },
+    "./plugins/notify-dsh": {
+      "types": "./lib/plugins/notify-dsh.d.ts",
+      "default": "./lib/plugins/notify-dsh.js"
+    },
+    "./plugins/processes": {
+      "types": "./lib/plugins/processes.d.ts",
+      "default": "./lib/plugins/processes.js"
+    },
+    "./plugins/inspect": {
+      "types": "./lib/plugins/inspect.d.ts",
+      "default": "./lib/plugins/inspect.js"
+    },
+    "./bench/clock": {
+      "types": "./lib/bench/clock.d.ts",
+      "default": "./lib/bench/clock.js"
+    },
+    "./bench/runtime": {
+      "types": "./lib/bench/runtime.d.ts",
+      "default": "./lib/bench/runtime.js"
+    },
+    "./bench/case": {
+      "types": "./lib/bench/case.d.ts",
+      "default": "./lib/bench/case.js"
+    },
+    "./bench/load": {
+      "types": "./lib/bench/load.d.ts",
+      "default": "./lib/bench/load.js"
+    },
+    "./bench/slice": {
+      "types": "./lib/bench/slice.d.ts",
+      "default": "./lib/bench/slice.js"
+    },
+    "./bench/session": {
+      "types": "./lib/bench/session.d.ts",
+      "default": "./lib/bench/session.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "README.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "clean": "rm -rf lib"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "dependencies": {
+    "@deepseek-ai/cordis": "^4.0.2",
+    "acorn": "^8.14.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.2"
+  }
+}

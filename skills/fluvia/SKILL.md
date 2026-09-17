@@ -14,7 +14,7 @@ can be submitted in one burst and then forgotten about.
 ## Start it
 
 ```
-tsx src/cli/bin.ts --notify dsh --trace out/session.jsonl.gz --concurrency 4
+fluvia cli --notify dsh --trace out/session.jsonl.gz --concurrency 4
 ```
 
 `--notify dsh` gives coalesced envelopes; `--json` makes stdout NDJSON if you
