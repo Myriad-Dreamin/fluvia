@@ -24,10 +24,14 @@
     "bench": "node packages/cli/bin/fluvia.js bench",
     "slice": "node packages/cli/bin/fluvia.js slice",
     "test": "pnpm test:boundary && pnpm --filter dsh-plugin-fluvia verify && pnpm --filter pi-web-fluvia verify",
-    "test:boundary": "pnpm --filter @fluvia/cli test:boundary"
+    "test:boundary": "pnpm --filter @fluvia/cli test:boundary",
+    "docs:dev": "vitepress dev docs",
+    "docs:build": "vitepress build docs",
+    "docs:preview": "vitepress preview docs"
   },
   "devDependencies": {
-    "@fluvia/cli": "workspace:^"
+    "@fluvia/cli": "workspace:^",
+    "vitepress": "^1.6.4"
   },
   "packageManager": "pnpm@12.4.2"
 }
