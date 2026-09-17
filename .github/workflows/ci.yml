@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm typecheck
+      - run: pnpm test
+      - name: fluvia run (bench cases)
+        run: npx fluvia run . --json > bench-report.json && node -e "const r=require('./bench-report.json'); console.log(JSON.stringify(r.summary ?? r, null, 1))"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bench-report
+          path: bench-report.json
+          if-no-files-found: ignore

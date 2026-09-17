@@ -1,0 +1,71 @@
+name: Release
+
+# Publishes @fluvia/core, @fluvia/cli and @fluvia/toolbox-default.
+#
+# Trigger: push a tag `v<version>` matching every package's version, e.g.
+# `v0.0.1-alpha.1`. A prerelease version (anything with a `-`) is published
+# under the dist-tag of its prerelease id (`alpha`), so `latest` never points
+# at a prerelease.
+#
+# Auth: trusted publishing (OIDC) once each package exists on npm and has this
+# workflow registered as its trusted publisher. npm cannot create a package
+# through OIDC, so the very first release of a package needs a token: add an
+# `NPM_TOKEN` repository secret (a granular access token with publish rights
+# for the @fluvia scope), run this workflow, then register the trusted
+# publisher on npmjs.com and delete the secret. When the secret is absent the
+# job uses OIDC.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: npm
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - run: npm --version   # trusted publishing needs npm >= 11.5.1
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm typecheck
+      - run: pnpm test
+      - name: Check the tag matches the package versions
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          for pkg in core cli toolbox-default; do
+            v=$(node -p "require('./packages/$pkg/package.json').version")
+            [ "$v" = "$tag" ] || { echo "packages/$pkg is $v, tag is $tag"; exit 1; }
+          done
+      - name: Pack (rewrites workspace: ranges to real versions)
+        run: |
+          rm -rf packs && mkdir packs
+          for pkg in core toolbox-default cli; do
+            (cd packages/$pkg && pnpm pack --pack-destination ../../packs)
+          done
+          ls -l packs
+      - name: Publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          version=$(node -p "require('./packages/core/package.json').version")
+          case "$version" in
+            *-*) tag=$(echo "$version" | sed -E 's/^[^-]+-([A-Za-z]+).*/\1/') ;;
+            *)   tag=latest ;;
+          esac
+          echo "publishing $version under dist-tag $tag"
+          for t in packs/fluvia-core-*.tgz packs/fluvia-toolbox-default-*.tgz packs/fluvia-cli-*.tgz; do
+            npm publish "$t" --access public --tag "$tag" --provenance
+          done
