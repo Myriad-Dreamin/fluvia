@@ -35,6 +35,23 @@ export interface SchedulerConfig {
   tracer: Tracer
   /** Maximum number of implementations running at once. */
   concurrency: number
+  /**
+   * Where `cx.sleep` gets its timers. Defaults to the host's. The bench replay
+   * passes a virtual clock here so a recorded session re-runs deterministically
+   * and as fast as the machine allows.
+   */
+  timers?: Timers
+}
+
+/** The two timer functions `cx.sleep` needs; the host's globals satisfy it. */
+export interface Timers {
+  setTimeout(fn: () => void, ms: number): unknown
+  clearTimeout(handle: unknown): void
+}
+
+const HOST_TIMERS: Timers = {
+  setTimeout: (fn, ms) => setTimeout(fn, ms),
+  clearTimeout: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>),
 }
 
 /** Raised for a line that parses but cannot be scheduled. */
@@ -66,6 +83,7 @@ export class Scheduler extends Service {
   private readonly waiters = new Map<string, Set<string>>()
   private readonly idleWaiters: (() => void)[] = []
   private readonly tracer: Tracer
+  private readonly timers: Timers
   private seq = 0
 
   /** Maximum simultaneous executions; queued calls wait for a slot. */
@@ -75,6 +93,7 @@ export class Scheduler extends Service {
     super(ctx, 'calls')
     this.tracer = config.tracer
     this.concurrency = config.concurrency
+    this.timers = config.timers ?? HOST_TIMERS
   }
 
   /** Milliseconds since the session origin; the clock inspection reports use. */
@@ -272,7 +291,7 @@ export class Scheduler extends Service {
         const at = this.tracer.emit('call.progress', { call: call.id, note, pct })
         call.progress.push({ at, note, pct })
       },
-      sleep: (ms: number) => sleep(ms, controller.signal),
+      sleep: (ms: number) => sleep(ms, controller.signal, this.timers),
       runtime: this.facade,
     }
 
@@ -435,15 +454,15 @@ function skipReason(producer: CallRecord['state'] | undefined, kind: DepRef['kin
 }
 
 /** Abortable sleep used by implementations through `cx.sleep`. */
-export function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+export function sleep(ms: number, signal?: AbortSignal, timers: Timers = HOST_TIMERS): Promise<void> {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) return reject(signal.reason ?? new FluviaError('Cancelled', 'aborted'))
-    const timer = setTimeout(() => {
+    const timer = timers.setTimeout(() => {
       signal?.removeEventListener('abort', onAbort)
       resolve()
     }, ms)
     const onAbort = () => {
-      clearTimeout(timer)
+      timers.clearTimeout(timer)
       reject(signal?.reason ?? new FluviaError('Cancelled', 'aborted'))
     }
     signal?.addEventListener('abort', onAbort, { once: true })

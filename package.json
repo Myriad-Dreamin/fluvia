@@ -14,8 +14,10 @@
     "demo": "tsx src/demo/run.ts",
     "demo-perf": "tsx src/perf/bin.ts",
     "dsh-inbox": "tsx src/dsh-inbox/bin.ts",
-    "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test:boundary": "tsx test/boundary.ts"
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p src/bench/page/tsconfig.json",
+    "test:boundary": "tsx test/boundary.ts",
+    "bench": "tsx src/bench/bin.ts",
+    "bench:page": "tsx src/bench/page/build.ts"
   },
   "dependencies": {
     "@deepseek-ai/cordis": "^4.0.2",
@@ -23,6 +25,11 @@
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
+    "@types/react": "18.3.12",
+    "@types/react-dom": "18.3.1",
+    "esbuild": "0.28.2",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"
   },

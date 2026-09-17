@@ -165,6 +165,28 @@ pay off (fire independent calls immediately, never poll, pass handles rather
 than values, cancel work you no longer need). It works unchanged in dsh
 (`.dsh/skills/fluvia/`) and in Claude Code (`.claude/skills/fluvia/`).
 
+## Benchmark slices
+
+A recorded trace doubles as a benchmark. `src/bench/` cuts it at a line,
+restores a fresh runtime to the moment before that line on a virtual clock, and
+continues the slice one of two ways:
+
+- **Mechanical replay.** Every recorded line is typed again on its anchor, the
+  notification or line it was typed after, and each call is diffed against the
+  recording. No model is involved, so any divergence belongs to the harness:
+  concurrency, scheduling, a toolbox that reads the wall clock, or a line you
+  edited on purpose.
+- **Agent resumes.** One agent's lane is handed to a live agent at the cut,
+  while the other lanes keep replaying and consume what it produces. Virtual
+  time only moves between the agent's turns.
+
+```sh
+pnpm bench lines  --trace out/<session>.jsonl.gz
+pnpm bench replay --trace out/<session>.jsonl.gz --from 9 --to 25 --concurrency 2 \
+                  --edit '10=@tuner compileKernel(kernel5, { opt: 7 })'
+pnpm bench:page   # builds out/bench-page/index.html, the interactive demo of both modes
+```
+
 ## The trace
 
 `--trace out/<session>.jsonl.gz` writes a gzip JSONL stream, one event per line,
@@ -195,6 +217,7 @@ so the perf report always has a readable transcript alongside the timings.
 | `src/demo/` | `pnpm demo`: spawns the CLI and drives it as two agents over the NDJSON protocol |
 | `src/dsh-inbox/` | `pnpm dsh-inbox`: a standalone receiving end of `dsh:http:<url>` — stores envelopes and serves a live watch page, for watching the notification side without running dsh |
 | `packages/dsh-plugin-fluvia/` | the real dsh plugin: receives the same envelopes inside a dsh process and delivers them into an agent turn, so they land in the dsh Web UI ([docs/dsh-ui.md](docs/dsh-ui.md)) |
+| `src/bench/` | `pnpm bench`: trace slicing, virtual-clock replay, agent takeover, and the demo page in `page/` |
 | `src/perf/` | `pnpm demo-perf`: trace → model → self-contained HTML report, plus the local server |
 | `skills/fluvia/` | the agent-facing skill |
 | `docs/` | the protocol and the dsh integration guide |

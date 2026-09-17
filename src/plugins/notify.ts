@@ -100,7 +100,7 @@ export class NotifyHub extends Service {
             // notification was buffered. Sinks that deliver inline are
             // accounted here.
             if (!sink.coalescing) {
-              this.recordDelivery(sink.name, [id], Buffer.byteLength(notification.text))
+              this.recordDelivery(sink.name, [id], new TextEncoder().encode(notification.text).length)
             }
           },
           (error: Error) => {
