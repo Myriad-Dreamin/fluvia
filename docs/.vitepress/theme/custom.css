@@ -1,0 +1,25 @@
+/*
+ * The brand: river blue into teal. Every colour the site overrides lives here.
+ * VitePress switches themes with a `dark` class on <html>.
+ */
+:root {
+  --vp-c-brand-1: #3b82f6;
+  --vp-c-brand-2: #2f74e0;
+  --vp-c-brand-3: #14b8a6;
+  --vp-c-brand-soft: rgba(59, 130, 246, 0.14);
+
+  --vp-home-hero-name-color: transparent;
+  --vp-home-hero-name-background: linear-gradient(120deg, #3b82f6 20%, #14b8a6);
+  --vp-home-hero-image-background-image: linear-gradient(120deg, rgba(59, 130, 246, 0.55) 30%, rgba(20, 184, 166, 0.55));
+  --vp-home-hero-image-filter: blur(56px);
+}
+
+.dark {
+  --vp-c-brand-1: #60a5fa;
+  --vp-c-brand-2: #3b82f6;
+  --vp-c-brand-3: #2dd4bf;
+  --vp-c-brand-soft: rgba(96, 165, 250, 0.16);
+
+  --vp-home-hero-name-background: linear-gradient(120deg, #60a5fa 20%, #2dd4bf);
+  --vp-home-hero-image-background-image: linear-gradient(120deg, rgba(96, 165, 250, 0.5) 30%, rgba(45, 212, 191, 0.5));
+}

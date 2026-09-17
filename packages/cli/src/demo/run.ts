@@ -542,7 +542,19 @@ class Demo {
 /* --------------------------------------------------------------------- main */
 
 /** Entry point: spawn, play, settle, shut down, report. */
-export async function main(_argv: string[] = []): Promise<void> {
+export async function main(argv: string[] = []): Promise<void> {
+  if (argv.includes('--help') || argv.includes('-h')) {
+    process.stdout.write(
+      [
+        'fluvia demo — drive the CLI as a scripted pair of agents and record a trace',
+        '',
+        '  Writes out/<session>.jsonl.gz and out/<session>.notify.jsonl under the current directory.',
+        '  FLUVIA_DSH_HTTP=<url>   also post envelopes to a dsh inbox',
+        '',
+      ].join('\n'),
+    )
+    return
+  }
   const session = sessionId()
   const tracePath = resolve(ROOT, 'out', `${session}.jsonl.gz`)
   // Per session, because `file:` sinks append: a shared out/notify.jsonl would
