@@ -49,7 +49,7 @@ jobs:
             v=$(node -p "require('./packages/$pkg/package.json').version")
             [ "$v" = "$tag" ] || { echo "packages/$pkg is $v, tag is $tag"; exit 1; }
           done
-      - name: Pack (rewrites workspace: ranges to real versions)
+      - name: "Pack (rewrites workspace: ranges to real versions)"
         run: |
           rm -rf packs && mkdir packs
           for pkg in core toolbox-default cli; do
