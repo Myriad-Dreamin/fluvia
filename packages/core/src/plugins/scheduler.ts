@@ -18,7 +18,7 @@
 
 import { Context, Service } from '@deepseek-ai/cordis'
 import { FluviaError } from '../types.ts'
-import type { ArgNode, CallOutcome, CallRecord, DepRef, FunctionDef, RuntimeFacade, SkipReason } from '../types.ts'
+import type { ArgNode, CallOutcome, CallRecord, DepRef, FunctionDef, RuntimeFacade, SkipReason, SpawnRequest } from '../types.ts'
 import type { RawArg, ParsedLine } from '../parser.ts'
 import type { Tracer } from '../trace.ts'
 import { describe, toCallError } from '../describe.ts'
@@ -293,6 +293,13 @@ export class Scheduler extends Service {
       },
       sleep: (ms: number) => sleep(ms, controller.signal, this.timers),
       runtime: this.facade,
+      spawn: (request: SpawnRequest) => {
+        // The supervisor is a separate plugin: the CLI and the server register
+        // it, an in-memory or browser runtime does not.
+        const supervisor = (this.ctx as { processes?: { spawn(call: CallRecord, request: SpawnRequest): Promise<unknown> } }).processes
+        if (!supervisor) return Promise.reject(new FluviaError('SpawnError', 'this runtime has no process supervisor'))
+        return supervisor.spawn(call, request) as Promise<import('../types.ts').ProcessInfo>
+      },
     }
 
     let args: Record<string, unknown>

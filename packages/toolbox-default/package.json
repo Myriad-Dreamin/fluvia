@@ -18,6 +18,10 @@
       "types": "./lib/index.d.ts",
       "default": "./lib/index.js"
     },
+    "./process": {
+      "types": "./lib/process.d.ts",
+      "default": "./lib/process.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [

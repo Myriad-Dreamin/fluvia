@@ -153,6 +153,35 @@ A `Notification` (see `@fluvia/core/types`) is produced for every terminal call
 and handed to every registered sink. Sinks are cordis plugins that call
 `ctx.notify.register(sink)`; `ctx.notify` is the hub service.
 
+### Process exits
+
+A call may start a child process through `cx.spawn()` (the process supervisor,
+`@fluvia/core/plugins/processes`). Such a call settles as soon as the child has
+spawned, with a `Process` value: `{ id, pid, call, command, stdout, stderr }`,
+where `stdout` and `stderr` are log files that grow while the child runs. The
+child outlives the call. When it exits, the supervisor publishes a second
+notification to the same agent, with `event: "processExited"` and a `process`
+field carrying `code`, `signal`, both log paths, their byte counts and `runMs`:
+
+```
+← c0 exec done (wait 0ms, run 9ms) ⇒ process0 : Process p0 pid 4242 running · sh -c "sleep 2; echo hi"; err0 void
+← c0 processExited(process0) p0 pid 4242 exit code 0 after 2.0s · sh -c "sleep 2; echo hi"
+    stdout /tmp/fluvia/<session>/p0-c0.stdout.log (3 B)
+    stderr /tmp/fluvia/<session>/p0-c0.stderr.log (0 B)
+```
+
+Every ordinary notification carries `event: "callSettled"`. A process notice
+still fills the call-shaped fields (`fn: "processExited"`, `outcome` is `done`
+for exit code 0 and `failed` otherwise, `ready` names the process handle), so a
+consumer that predates `event` renders it as a readable line. Handles do not
+change on exit. The log directory is `--proc-dir`, by default
+`<tmpdir>/fluvia/<session>`. At shutdown the CLI waits for live processes like it
+waits for live calls; `serve` sends them SIGTERM.
+
+`@fluvia/toolbox-default/process` is an opt-in toolbox exposing `exec(command, [args],
+{ cwd })`. It runs whatever the agent names, so it is never preloaded by
+default.
+
 `fluvia-dsh` is the sink built for DeepSeek Harness: it coalesces notifications
 that land within a short window into one envelope, so an agent turn is
 interrupted once rather than five times, and renders them in dsh's
@@ -166,7 +195,8 @@ the `TraceMeta` header. Read it with `readTrace()` from `@fluvia/core/trace`.
 
 Events: `session.start`, `agent.join`, `agent.input`, `cli.output`,
 `call.submit`, `call.queued`, `call.start`, `call.progress`, `call.settle`,
-`call.cancel`, `handle.settle`, `notify.emit`, `notify.deliver`, `session.end`.
+`call.cancel`, `handle.settle`, `process.spawn`, `process.exit`, `notify.emit`,
+`notify.deliver`, `session.end`.
 
 `call.queued` marks the moment a call's dependencies are all ready and it begins
 waiting for a concurrency slot, which is what separates time lost to the

@@ -66,6 +66,10 @@
       "types": "./lib/plugins/notify-dsh.d.ts",
       "default": "./lib/plugins/notify-dsh.js"
     },
+    "./plugins/processes": {
+      "types": "./lib/plugins/processes.d.ts",
+      "default": "./lib/plugins/processes.js"
+    },
     "./plugins/inspect": {
       "types": "./lib/plugins/inspect.d.ts",
       "default": "./lib/plugins/inspect.js"

@@ -213,15 +213,17 @@ export function renderDshEnvelope(batch: Notification[], session: string): strin
 /** Render one agent's block. See {@link renderDshEnvelope} for the ordering rationale. */
 function renderBlock(agent: string, list: Notification[], session: string): string {
   const sorted = [...list].sort((a, b) => a.at - b.at)
-  const out: string[] = [`<fluvia-notify agent="${attr(agent)}" session="${attr(session)}">`, headline(sorted)]
+  const exits = sorted.filter((n) => n.event === 'processExited')
+  const calls = sorted.filter((n) => n.event !== 'processExited')
+  const out: string[] = [`<fluvia-notify agent="${attr(agent)}" session="${attr(session)}">`, headline(calls, exits)]
 
-  const done = sorted.filter((n) => n.outcome === 'done')
+  const done = calls.filter((n) => n.outcome === 'done')
   if (done.length) {
     out.push('', 'ready')
     for (const n of done) out.push(`  ${renderDone(n)}`)
   }
 
-  const failed = sorted.filter((n) => n.outcome === 'failed')
+  const failed = calls.filter((n) => n.outcome === 'failed')
   if (failed.length) {
     out.push('', 'failed')
     for (const n of failed) out.push(...renderFailed(n))
@@ -230,25 +232,30 @@ function renderBlock(agent: string, list: Notification[], session: string): stri
     out.push('  → recover by passing a ready err handle to another call; work waiting on the value handle is already skipped.')
   }
 
-  const skipped = sorted.filter((n) => n.outcome === 'skipped')
+  const skipped = calls.filter((n) => n.outcome === 'skipped')
   if (skipped.length) {
     out.push('', 'skipped (never ran)')
     for (const n of skipped) out.push(`  ${renderSkipped(n)}`)
   }
 
-  const cancelled = sorted.filter((n) => n.outcome === 'cancelled')
+  const cancelled = calls.filter((n) => n.outcome === 'cancelled')
   if (cancelled.length) {
     out.push('', 'cancelled')
     for (const n of cancelled) out.push(`  ${renderCancelled(n)}`)
   }
 
-  out.push('', ...renderRunnable(sorted))
+  if (exits.length) {
+    out.push('', 'processes exited')
+    for (const n of exits) out.push(...renderExited(n))
+  }
+
+  if (calls.length) out.push('', ...renderRunnable(calls))
   out.push('</fluvia-notify>')
   return out.join('\n')
 }
 
 /** The one-line summary that opens a block: how many, over how long, in what mix. */
-function headline(sorted: Notification[]): string {
+function headline(sorted: Notification[], exits: Notification[] = []): string {
   // Fixed order, matching the sections below, so the headline and the body
   // read in the same sequence however the settlements happened to arrive.
   const order: [Notification['outcome'], string][] = [
@@ -264,7 +271,10 @@ function headline(sorted: Notification[]): string {
     .join(', ')
   const span = sorted.length > 1 ? sorted[sorted.length - 1]!.at - sorted[0]!.at : 0
   const window = span >= 1 ? ` within ${ms(span)}` : ''
-  return `${sorted.length} call${sorted.length === 1 ? '' : 's'} settled${window} — ${mix}.`
+  const exited = exits.length ? `${exits.length} process${exits.length === 1 ? '' : 'es'} exited` : ''
+  if (!sorted.length) return `${exited}.`
+  const settled = `${sorted.length} call${sorted.length === 1 ? '' : 's'} settled${window} — ${mix}`
+  return exited ? `${settled}; ${exited}.` : `${settled}.`
 }
 
 /** `c2 compileKernel → bin2 : Binary 4.1 MB (wait 12ms, run 840ms)` */
@@ -318,6 +328,22 @@ function renderRunnable(sorted: Notification[]): string[] {
   }
   if (!any) lines.push('  nothing else was waiting on these handles.')
   return lines
+}
+
+/**
+ * A `processExited` notice: the handle it belongs to, how it ended, and the two
+ * log paths, which are what the agent reads next.
+ */
+function renderExited(n: Notification): string[] {
+  const p = n.process
+  const name = n.ready?.name ?? n.bind.value
+  if (!p) return [`  ${n.call} processExited(${name}) — ${n.ready?.summary ?? n.outcome}`]
+  const status = p.signal ? `killed by ${p.signal}` : `exit code ${p.code}`
+  return [
+    `  ${n.call} processExited(${name}) — ${p.id} pid ${p.pid} ${status} after ${ms(p.runMs)} · ${p.command}`,
+    `      stdout ${p.stdout} (${p.bytes.stdout} B)`,
+    `      stderr ${p.stderr} (${p.bytes.stderr} B)`,
+  ]
 }
 
 /** `(wait 12ms, run 840ms)`, the split that tells queueing apart from real work. */

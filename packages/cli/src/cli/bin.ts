@@ -14,6 +14,8 @@
 
 import { createInterface } from 'node:readline'
 import { readFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { parseArgs } from 'node:util'
 import { Context } from '@deepseek-ai/cordis'
 import { Tracer } from '@fluvia/core/trace'
@@ -22,6 +24,7 @@ import { FunctionRegistry } from '@fluvia/core/plugins/registry'
 import { Environment } from '@fluvia/core/plugins/env'
 import { NotifyHub } from '@fluvia/core/plugins/notify'
 import { Scheduler, isTerminal } from '@fluvia/core/plugins/scheduler'
+import { ProcessSupervisor } from '@fluvia/core/plugins/processes'
 import { controlFunctions, HELP } from '@fluvia/core/plugins/inspect'
 import { CliSession, Output } from '@fluvia/core/session'
 import { createSink } from './sinks.ts'
@@ -43,6 +46,7 @@ export async function main(argv: string[]): Promise<void> {
       notify: { type: 'string', multiple: true },
       script: { type: 'string' },
       session: { type: 'string' },
+      'proc-dir': { type: 'string' },
       json: { type: 'boolean', default: false },
       quiet: { type: 'boolean', default: false },
       help: { type: 'boolean', default: false },
@@ -64,10 +68,11 @@ export async function main(argv: string[]): Promise<void> {
   await ctx.plugin(FunctionRegistry)
   await ctx.plugin(Environment, { tracer })
   await ctx.plugin(NotifyHub, tracer)
+  await ctx.plugin(ProcessSupervisor, { tracer, dir: values['proc-dir'] ?? join(tmpdir(), 'fluvia', sessionId) })
   await ctx.plugin(Scheduler, { tracer, concurrency })
   // Services appear when their fiber starts, which is a microtask after plugin();
   // inject() resolves once every name below is live, so nothing races the input.
-  await ctx.inject(['functions', 'env', 'notify', 'calls'], () => {})
+  await ctx.inject(['functions', 'env', 'notify', 'processes', 'calls'], () => {})
 
   ctx.functions.registerAll(controlFunctions(ctx))
 
@@ -142,6 +147,11 @@ export async function main(argv: string[]): Promise<void> {
     clearTimeout(timer)
     ctx.calls.abortAll('session closing')
     await ctx.calls.drain()
+    // A spawned process outlives the call that started it, and its exit is a
+    // notification the agent is owed, so it gets the same drain budget.
+    const kill = setTimeout(() => ctx.processes.killAll(), DRAIN_TIMEOUT_MS)
+    await ctx.processes.drain()
+    clearTimeout(kill)
     await ctx.notify.close()
 
     const stats = collectStats()

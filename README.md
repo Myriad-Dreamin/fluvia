@@ -198,6 +198,7 @@ fluvia cli [options]
   --notify <spec>      sink, repeatable (default: stdout)
   --script <file>      read lines from a file instead of stdin
   --session <id>       session id; otherwise derived from --trace
+  --proc-dir <dir>     stdout/stderr logs of spawned processes (default: <tmpdir>/fluvia/<session>)
   --json               stdout becomes NDJSON (machine mode) instead of human text
   --quiet              suppress the startup banner (answers are still printed)
 ```

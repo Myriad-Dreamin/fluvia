@@ -18,7 +18,8 @@
 
 import { createServer } from 'node:net'
 import { chmodSync, mkdirSync, readFileSync, rmSync } from 'node:fs'
-import { dirname } from 'node:path'
+import { dirname, join } from 'node:path'
+import { tmpdir } from 'node:os'
 import { parseArgs } from 'node:util'
 import { Context } from '@deepseek-ai/cordis'
 import { Tracer } from '@fluvia/core/trace'
@@ -28,6 +29,7 @@ import { Environment } from '@fluvia/core/plugins/env'
 import type { HandleScope } from '@fluvia/core/plugins/env'
 import { NotifyHub } from '@fluvia/core/plugins/notify'
 import { Scheduler, isTerminal } from '@fluvia/core/plugins/scheduler'
+import { ProcessSupervisor } from '@fluvia/core/plugins/processes'
 import { controlFunctions } from '@fluvia/core/plugins/inspect'
 import { AgentNamer, Connection } from './connection.ts'
 import type { ConnectionPolicy } from './connection.ts'
@@ -45,6 +47,7 @@ export async function main(argv: string[]): Promise<void> {
       concurrency: { type: 'string', default: '4' },
       trace: { type: 'string' },
       session: { type: 'string' },
+      'proc-dir': { type: 'string' },
       'token-file': { type: 'string' },
       scope: { type: 'string', default: 'agent' },
       'max-connections': { type: 'string', default: '32' },
@@ -65,6 +68,7 @@ export async function main(argv: string[]): Promise<void> {
         '  --preload <module>       toolbox module, repeatable; this IS the instruction set',
         '  --concurrency <n>        implementations running at once, shared by every agent',
         '  --trace <file>           gzip JSONL trace, written host-side',
+        '  --proc-dir <dir>         stdout/stderr logs of spawned processes (default <tmpdir>/fluvia/<session>)',
         '  --token-file <path>      shared secret a client must present (mandatory for tcp:)',
         '  --scope agent|runtime    handle namespace per agent (default) or shared',
         '  --max-connections <n>    live connections (default 32)',
@@ -97,8 +101,9 @@ export async function main(argv: string[]): Promise<void> {
   await ctx.plugin(FunctionRegistry)
   await ctx.plugin(Environment, { tracer, scope })
   await ctx.plugin(NotifyHub, tracer)
+  await ctx.plugin(ProcessSupervisor, { tracer, dir: values['proc-dir'] ?? join(tmpdir(), 'fluvia', sessionId) })
   await ctx.plugin(Scheduler, { tracer, concurrency })
-  await ctx.inject(['functions', 'env', 'notify', 'calls'], () => {})
+  await ctx.inject(['functions', 'env', 'notify', 'processes', 'calls'], () => {})
 
   ctx.functions.registerAll(controlFunctions(ctx))
   for (const specifier of values.preload?.length ? values.preload : [DEFAULT_TOOLBOX]) {
@@ -199,6 +204,8 @@ export async function main(argv: string[]): Promise<void> {
     server.close()
     ctx.calls.abortAll('server shutting down')
     await ctx.calls.drain()
+    ctx.processes.killAll()
+    await ctx.processes.drain()
     await ctx.notify.close()
     tracer.emit('session.end', { reason, stats: collectStats() })
     await tracer.close()
