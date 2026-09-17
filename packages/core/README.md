@@ -34,6 +34,8 @@ import { createRuntime } from '@fluvia/core/bench/runtime'
 | `@fluvia/core/bench/runtime` | an in-memory runtime with no filesystem |
 | `@fluvia/core/bench/slice` | index a recorded trace and cut it at a line |
 | `@fluvia/core/bench/session` | replay a slice, or hand one lane to an agent |
+| `@fluvia/core/bench/load` | a recording — `.jsonl(.gz)` or a pi-web `trace.json` — as a sliceable trace |
+| `@fluvia/core/bench/case` | `defineBench`, `judges`, `runCase`: a slice with a verdict |
 
 Turning a module specifier into registered functions lives in
 [`@fluvia/cli`](https://www.npmjs.com/package/@fluvia/cli), not here.

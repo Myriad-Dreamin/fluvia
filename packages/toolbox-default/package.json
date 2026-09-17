@@ -22,11 +22,13 @@
   },
   "files": [
     "lib",
+    "bench",
+    "traces",
     "README.md"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.bench.json",
     "clean": "rm -rf lib"
   },
   "engines": {

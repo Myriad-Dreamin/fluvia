@@ -20,7 +20,7 @@
  * @module @fluvia/core/bench/session
  */
 
-import type { CallRecord, FunctionDef, Notification, TraceEvent } from '../types.ts'
+import type { CallRecord, FunctionDef, HandleRecord, Notification, TraceEvent } from '../types.ts'
 import { isTerminal } from '../plugins/scheduler.ts'
 import { VirtualClock } from './clock.ts'
 import { createRuntime } from './runtime.ts'
@@ -231,12 +231,27 @@ export class SliceSession {
     return this.rt.ctx.calls.get(id)
   }
 
+  /** Every handle bound in the replayed runtime, in binding order. */
+  handles(): HandleRecord[] {
+    return this.rt.ctx.env.handles()
+  }
+
   /* --------------------------------------------------------------- mechanical */
 
-  /** Replay the rest of the slice and let every call settle. */
-  async finish(): Promise<SliceReport> {
-    await this.runUntil(() => this.pending.length === 0)
-    await this.drain()
+  /**
+   * Replay the rest of the slice and let every call settle.
+   *
+   * `stop` is checked between steps, so a benchmark that only cares about
+   * reaching a state can end the slice there instead of draining work the
+   * question does not depend on. When it fires, live calls are left live.
+   */
+  async finish(stop?: () => boolean): Promise<SliceReport> {
+    let stopped = false
+    await this.runUntil(() => {
+      if (stop?.()) stopped = true
+      return stopped || this.pending.length === 0
+    })
+    if (!stopped) await this.drain(stop)
     return this.report()
   }
 
@@ -412,9 +427,10 @@ export class SliceSession {
     }
   }
 
-  private async drain(): Promise<void> {
+  private async drain(stop?: () => boolean): Promise<void> {
     const limit = this.clock.now() + (this.options.drainLimitMs ?? 600_000)
     while (this.rt.ctx.calls.live().length) {
+      if (stop?.()) return
       const timer = this.clock.nextAt()
       if (timer === undefined || timer > limit) break
       await this.clock.advanceTo(timer)

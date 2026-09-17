@@ -50,7 +50,10 @@ const COMMANDS: Record<string, Command> = {
     summary: 'build the interactive slice-bench page into one HTML file',
     load: () => import('./bench/page/build.ts'),
   },
-  // run: an agent loop over the runtime — added separately.
+  run: {
+    summary: 'run every `*.bench.ts` case in a tree and report pass or fail',
+    load: () => import('./run/bin.ts'),
+  },
 }
 
 /** Usage, generated from the table so the two cannot drift apart. */

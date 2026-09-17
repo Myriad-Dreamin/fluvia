@@ -1,0 +1,1907 @@
+{
+ "format": "pi-web-fluvia.trace",
+ "version": 1,
+ "exportedAt": "2026-09-17T05:42:06.665Z",
+ "mode": "live",
+ "model": {
+  "provider": "llm.myriad-dreamin.com",
+  "id": "deepseek-v4-flash-completion",
+  "api": "openai-completions",
+  "baseUrl": "https://llm.myriad-dreamin.com/v1"
+ },
+ "systemPrompt": "You drive fluvia, an asynchronous dataflow runtime, through the `fluvia` tool.\n\n- Submit one JS-syntax call per line: `prepareKernel({ size: 4096, dtype: \"f32\" })`. Arguments are literals, arrays, objects and handle names only — no nested calls, operators or member access.\n- Calls never block. Each async call is acknowledged at once with a call id and TWO handles: a value handle (`kernel0`) and an error handle (`err0`). Exactly one becomes ready; the other becomes void.\n- Chain by passing handles: `compileKernel(kernel0, { opt: 3 })` waits for `kernel0` by itself. Pass an error handle to submit a recovery branch up front (`explain(err0)`); a branch whose input turns void is skipped for free.\n- Results arrive later, on their own, as a `<fluvia-notify>` message. Do not poll and do not wait: submit everything that is already possible in one burst, then end your turn. You will be woken when calls settle.\n- Control instructions answer immediately and bind nothing: `list`, `cancel(c5)`, `inspect(c5)`, `vars()`, `defs()`, `help()`.\n\nYou are fluvia agent `pi` in session `web-20260917053913`. Your identity is fixed; never write an `@agent` prefix.\n\nInstructions loaded by the host (11); each binds <out>N and errN:\n  benchmark(kernel, dataset, { iters = 100, warmup = 10 }) → reportN, errN — Time a compiled kernel over a dataset and report latency, throughput and percentiles.\n  compileKernel(kernel, { opt = 2, fastMath = false }) → kernelN, errN — Compile a kernel source handle to a loadable module at the given optimisation level.\n  explain(error, { depth = \"short\" }) → noteN, errN — Diagnose an error handle: likely cause, evidence from the detail payload, and what to try next.\n  flakyProbe({ target = \"pcie-link\", failRate = 0.35, trials = 3 }) → probeN, errN — Probe an interconnect a few times; fails (retryably) when a trial trips the error threshold.\n  loadDataset({ name, shards = 4, split = \"train\", cache = true }) → datasetN, errN — Load a catalogued dataset split, shard by shard, into the local cache.\n  prepareKernel({ size = 4096, dtype = \"f32\", arch = \"sm90\", layout = \"row-major\" }) → kernelN, errN — Emit a kernel source spec (tile schedule, register budget) for a matmul of the given size.\n  quantize(kernel, { bits = 8, scheme = \"per-channel\" }) → kernelN, errN — Quantise a kernel to a narrower dtype, returning a source spec to recompile.\n  recover(error, { strategy = \"auto\" }) → noteN, errN — Plan a remediation for an error handle and validate it against the failure detail.\n  sleep({ ms = 1000, label = \"idle\" }) → tickN, errN — Idle for a while in abortable slices — a long call to cancel(), or a deliberate pause.\n  summarize(a, b, c, …, { title = \"session digest\" }) — or summarize({ items: [...] }) → digestN, errN — Fold several handles (kernels, reports, plans, notes) into one readable digest.\n  tune(report, { budget = 8, target = \"latency\" }) → planN, errN — Search tile and optimisation settings against a benchmark report; returns a retune plan.\nControl instructions: cancel, defs, help, inspect, list, vars.\n\nThe instruction set is fixed by the host running the runtime. You cannot add to it or change it.",
+ "live": {
+  "agent": "pi",
+  "concurrency": 4
+ },
+ "messages": [
+  {
+   "role": "user",
+   "content": [
+    {
+     "type": "text",
+     "text": "Prepare a 4096 f32 kernel for sm90 and a 16384 fp8 kernel for sm80, and load the imagenet-mini dataset with 6 shards. Compile both kernels at opt 3 and benchmark whichever compiles on imagenet-mini. For whichever fails, get a recovery note. When everything has settled, summarise the results as \"kernel sweep\"."
+    }
+   ],
+   "timestamp": 1789623554783
+  },
+  {
+   "role": "assistant",
+   "content": [
+    {
+     "type": "thinking",
+     "thinking": "Let me plan. I need to submit calls in one burst where possible, but later calls depend on handles.\n\nCalls:\n1. prepareKernel({ size: 4096, dtype: \"f32\", arch: \"sm90\" }) → kernel0, err0\n2. prepareKernel({ size: 16384, dtype: \"fp8\", arch: \"sm80\" }) → kernel1, err1\n3. loadDataset({ name: \"imagenet-mini\", shards: 6 }) → dataset2, err2\n4. compileKernel(kernel0, { opt: 3 }) → kernel3, err3\n5. compileKernel(kernel1, { opt: 3 }) → kernel4, err4\n6. recover(err3) and recover(err4) — recovery branches, will be skipped if input void.\n7. benchmark(kernel3, dataset2) → report, err — but this depends on compiled kernel. If compileKernel fails, benchmark gets a void handle → skipped for free. Actually \"benchmark whichever compiles on imagenet-mini\" — we can submit benchmark(kernel3, dataset2) and benchmark(kernel4, dataset2); the one whose kernel is void gets skipped.\n\nWait — but benchmark needs dataset2, and if dataset2 fails... whatever.\n\n8. summarize(...) — need to fold results. But summarize should be submitted after everything settled. The instruction says \"When everything has settled, summarise\". So submit summarize in a later turn after notifications.\n\nBut we can only submit calls now and then end turn. Actually we can submit summarize now with handles, but it would wait for those handles anyway. However, summary wants results including notes. Let's do it in a later burst once we know the outcome. Hmm, but can we do multiple bursts? Yes — we submit a burst, end turn, get notifications, then submit more.\n\nActually the summarize could be submitted with handles that will resolve. But which handles? We want to include: kernels (prepared), compiled kernels, report, recovery note. Order of summarize items determined by args order. But we don't know which fails. Simpler: do it after settling.\n\nLet me submit first burst: prepareKernel x2, loadDataset, compileKernel x2, recover(err3), recover(err4), benchmark(kernel3, dataset2), benchmark(kernel4, dataset2).\n\nHmm, but benchmark on a void kernel — \"a branch whose input turns void is skipped for free\" applies to error handles passed. Actually passing a void value handle also just makes it not ready. Presumably the call gets cancelled/skipped. Fine.\n\nActually careful: benchmark(kernel3, dataset2) where kernel3 may be void. It's fine.\n\nrecover(err3) — if err3 is void (compile succeeded), recover is skipped. recover(err4) similarly.\n\nLet me submit. Order matters for binding: compileKernel must come after prepareKernel lines. benchmark after compileKernel lines.\n\nLine order:\nprepareKernel({ size: 4096, dtype: \"f32\", arch: \"sm90\" })        → kernel0, err0\nprepareKernel({ size: 16384, dtype: \"fp8\", arch: \"sm80\" })       → kernel1, err1\nloadDataset({ name: \"imagenet-mini\", shards: 6 })                → dataset2, err2\ncompileKernel(kernel0, { opt: 3 })                               → kernel3, err3\ncompileKernel(kernel1, { opt: 3 })                               → kernel4, err4\nrecover(err3)                                                    → note5\nrecover(err4)                                                    → note6\nbenchmark(kernel3, dataset2)                                     → report7\nbenchmark(kernel4, dataset2)                                     → report8\n\nThen summarize later.\n\nLet me submit.",
+     "thinkingSignature": "reasoning_content"
+    },
+    {
+     "type": "toolCall",
+     "id": "call_00_eEO0oBy7nA5f0B7C9BVB9497",
+     "name": "fluvia",
+     "arguments": {
+      "calls": "prepareKernel({ size: 4096, dtype: \"f32\", arch: \"sm90\" })\nprepareKernel({ size: 16384, dtype: \"fp8\", arch: \"sm80\" })\nloadDataset({ name: \"imagenet-mini\", shards: 6 })\ncompileKernel(kernel0, { opt: 3 })\ncompileKernel(kernel1, { opt: 3 })\nrecover(err3)\nrecover(err4)\nbenchmark(kernel3, dataset2)\nbenchmark(kernel4, dataset2)"
+     }
+    }
+   ],
+   "api": "openai-completions",
+   "provider": "llm.myriad-dreamin.com",
+   "model": "deepseek-v4-flash-completion",
+   "usage": {
+    "input": 1782,
+    "output": 976,
+    "cacheRead": 128,
+    "cacheWrite": 0,
+    "totalTokens": 2886,
+    "cost": {
+     "input": 0,
+     "output": 0,
+     "cacheRead": 0,
+     "cacheWrite": 0,
+     "total": 0
+    }
+   },
+   "stopReason": "toolUse",
+   "timestamp": 1789623554792,
+   "responseId": "f2adf1ca-b178-4fe3-a3e3-13a602bf9e81",
+   "responseModel": "deepseek-flash"
+  },
+  {
+   "role": "toolResult",
+   "toolCallId": "call_00_eEO0oBy7nA5f0B7C9BVB9497",
+   "toolName": "fluvia",
+   "content": [
+    {
+     "type": "text",
+     "text": "> prepareKernel({ size: 4096, dtype: \"f32\", arch: \"sm90\" })\nc0 prepareKernel ⇒ kernel0, err0 [running] — result arrives as a fluvia notification\n> prepareKernel({ size: 16384, dtype: \"fp8\", arch: \"sm80\" })\nc1 prepareKernel ⇒ kernel1, err1 [running] — result arrives as a fluvia notification\n> loadDataset({ name: \"imagenet-mini\", shards: 6 })\nc2 loadDataset ⇒ dataset2, err2 [running] — result arrives as a fluvia notification\n> compileKernel(kernel0, { opt: 3 })\nc3 compileKernel ⇒ kernel3, err3 [waiting on kernel0] — result arrives as a fluvia notification\n> compileKernel(kernel1, { opt: 3 })\nc4 compileKernel ⇒ kernel4, err4 [waiting on kernel1] — result arrives as a fluvia notification\n> recover(err3)\nc5 recover ⇒ note5, err5 [waiting on err3] — result arrives as a fluvia notification\n> recover(err4)\nc6 recover ⇒ note6, err6 [waiting on err4] — result arrives as a fluvia notification\n> benchmark(kernel3, dataset2)\nc7 benchmark ⇒ report7, err7 [waiting on kernel3, dataset2] — result arrives as a fluvia notification\n> benchmark(kernel4, dataset2)\nc8 benchmark ⇒ report8, err8 [waiting on kernel4, dataset2] — result arrives as a fluvia notification"
+    }
+   ],
+   "details": {
+    "lines": [
+     "prepareKernel({ size: 4096, dtype: \"f32\", arch: \"sm90\" })",
+     "prepareKernel({ size: 16384, dtype: \"fp8\", arch: \"sm80\" })",
+     "loadDataset({ name: \"imagenet-mini\", shards: 6 })",
+     "compileKernel(kernel0, { opt: 3 })",
+     "compileKernel(kernel1, { opt: 3 })",
+     "recover(err3)",
+     "recover(err4)",
+     "benchmark(kernel3, dataset2)",
+     "benchmark(kernel4, dataset2)"
+    ],
+    "answers": [
+     "c0 prepareKernel ⇒ kernel0, err0 [running] — result arrives as a fluvia notification",
+     "c1 prepareKernel ⇒ kernel1, err1 [running] — result arrives as a fluvia notification",
+     "c2 loadDataset ⇒ dataset2, err2 [running] — result arrives as a fluvia notification",
+     "c3 compileKernel ⇒ kernel3, err3 [waiting on kernel0] — result arrives as a fluvia notification",
+     "c4 compileKernel ⇒ kernel4, err4 [waiting on kernel1] — result arrives as a fluvia notification",
+     "c5 recover ⇒ note5, err5 [waiting on err3] — result arrives as a fluvia notification",
+     "c6 recover ⇒ note6, err6 [waiting on err4] — result arrives as a fluvia notification",
+     "c7 benchmark ⇒ report7, err7 [waiting on kernel3, dataset2] — result arrives as a fluvia notification",
+     "c8 benchmark ⇒ report8, err8 [waiting on kernel4, dataset2] — result arrives as a fluvia notification"
+    ]
+   },
+   "isError": false,
+   "timestamp": 1789623559716
+  },
+  {
+   "role": "assistant",
+   "content": [
+    {
+     "type": "text",
+     "text": "Submitted the whole sweep in one burst:\n\n- **c0** `prepareKernel` → f32/sm90/4096 → `kernel0`\n- **c1** `prepareKernel` → fp8/sm80/16384 → `kernel1`\n- **c2** `loadDataset` → imagenet-mini, 6 shards → `dataset2`\n- **c3/c4** `compileKernel` at opt 3 on both → `kernel3`, `kernel4`\n- **c5/c6** `recover(err3)`, `recover(err4)` — pre-wired recovery branches that are skipped for free if the corresponding compile succeeds\n- **c7/c8** `benchmark` of each compiled kernel on `dataset2` — the branch whose kernel turns void is dropped automatically\n\nEnding my turn now; I'll fold everything into a \"kernel sweep\" digest once the notifications settle."
+    }
+   ],
+   "api": "openai-completions",
+   "provider": "llm.myriad-dreamin.com",
+   "model": "deepseek-v4-flash-completion",
+   "usage": {
+    "input": 431,
+    "output": 198,
+    "cacheRead": 2816,
+    "cacheWrite": 0,
+    "totalTokens": 3445,
+    "cost": {
+     "input": 0,
+     "output": 0,
+     "cacheRead": 0,
+     "cacheWrite": 0,
+     "total": 0
+    }
+   },
+   "stopReason": "stop",
+   "timestamp": 1789623559725,
+   "responseId": "58faae70-1fe4-43ff-82af-c1a57d83cc36",
+   "responseModel": "deepseek-flash"
+  },
+  {
+   "role": "fluvia-notify",
+   "text": "<fluvia-notify agent=\"pi\" session=\"web-20260917053913\">\n5 calls settled — 3 ready, 1 failed, 1 skipped.\n\nc0 prepareKernel done (wait 100µs, run 465ms) ⇒ kernel0 : Kernel 4096x4096 f32 matmul · 64x64 tiles · source (690 lines); err0 void\n  now runnable: c3\nc1 prepareKernel done (wait 0µs, run 581ms) ⇒ kernel1 : Kernel 16384x16384 fp8 matmul · 64x64 tiles · source (812 lines); err1 void\n  now runnable: c4\nc2 loadDataset done (wait 100µs, run 815ms) ⇒ dataset2 : Dataset imagenet-mini/train · 6 shards · 128k rows · 0.39 GB; err2 void\nc4 compileKernel failed (wait 580ms, run 83ms) ⇒ err4 : KernelCompileError \"compileKernel: fp8 tensor cores are not implemented on sm80 (Ampere)\"; kernel4 void\n  now runnable: c6\nc8 benchmark skipped — c4 failed, so the value handle it consumes is void\n</fluvia-notify>",
+   "count": 5,
+   "source": "live",
+   "timestamp": 1789623560691
+  },
+  {
+   "role": "assistant",
+   "content": [
+    {
+     "type": "thinking",
+     "thinking": "Now: c3 compileKernel for f32/sm90 still running? It says \"5 calls settled — 3 ready, 1 failed, 1 skipped.\" c0, c1, c2, c4, c8 settled. c3 still running presumably. c5 skipped (err3 void? no — err3 not yet known). Actually c5 waiting on err3; if err3 not settled, c5 stays waiting. Hmm, but they said 5 settled. So c3 still running, c5 still waiting, c6 now runnable, c7 waiting.\n\nNothing to submit now — just wait. Actually should I do anything? No new calls possible/needed. End turn.\n\nWait \"1 skipped\" = c8. So c3 pending. Nothing to submit. End turn.",
+     "thinkingSignature": "reasoning_content"
+    },
+    {
+     "type": "text",
+     "text": "Noted. State so far:\n\n- **c0** ✅ f32/sm90 4096 kernel source (690 lines) → `kernel3` compile in flight\n- **c1** ✅ fp8/sm80 16384 kernel source (812 lines) — but **c4 failed**: `KernelCompileError` — fp8 tensor cores are not implemented on sm80 (Ampere). `kernel4` void, so **c8 benchmark was skipped** for free.\n- **c2** ✅ imagenet-mini/train, 6 shards, 128k rows, 0.39 GB\n- **c6** `recover(err4)` now runnable → recovery note inbound\n\nStill waiting on c3 (f32 compile), c5 (recovery branch for err3), c7 (benchmark of kernel3). No new calls to submit — ending turn until the next notifications."
+    }
+   ],
+   "api": "openai-completions",
+   "provider": "llm.myriad-dreamin.com",
+   "model": "deepseek-v4-flash-completion",
+   "usage": {
+    "input": 405,
+    "output": 364,
+    "cacheRead": 3328,
+    "cacheWrite": 0,
+    "totalTokens": 4097,
+    "cost": {
+     "input": 0,
+     "output": 0,
+     "cacheRead": 0,
+     "cacheWrite": 0,
+     "total": 0
+    }
+   },
+   "stopReason": "stop",
+   "timestamp": 1789623561417,
+   "responseId": "8b09d48a-c084-450a-ba9a-abbb8b70e911",
+   "responseModel": "deepseek-flash"
+  },
+  {
+   "role": "fluvia-notify",
+   "text": "<fluvia-notify agent=\"pi\" session=\"web-20260917053913\">\n3 calls settled — 2 ready, 1 skipped.\n\nc6 recover done (wait 663ms, run 1.9s) ⇒ note6 : Note recovery for KernelCompileError: lower the dtype to one the arch supports, or retarget a newer …; err6 void\nc3 compileKernel done (wait 464ms, run 2.1s) ⇒ kernel3 : Kernel gemm_4096_f32 compiled · opt 3 · 19.5 KiB cubin · 94% occupancy; err3 void\n  now runnable: c7\nc5 recover skipped — c3 succeeded, so the error handle it consumes is void\n</fluvia-notify>",
+   "count": 3,
+   "source": "live",
+   "timestamp": 1789623563242
+  },
+  {
+   "role": "assistant",
+   "content": [
+    {
+     "type": "thinking",
+     "thinking": "Now c7 benchmark running. c5 skipped. Wait for c7, then summarize.\n\nNothing to submit yet. End turn.",
+     "thinkingSignature": "reasoning_content"
+    },
+    {
+     "type": "text",
+     "text": "Update:\n\n- **c3** ✅ `gemm_4096_f32` compiled, opt 3, 19.5 KiB cubin, 94% occupancy → err3 void, so **c5 recovery branch was skipped for free** (correct — nothing to recover).\n- **c6** ✅ recovery note for the sm80 fp8 failure: lower the dtype to one the arch supports, or retarget a newer arch.\n- **c7** benchmark of `kernel3` on `dataset2` is now running — that's the last outstanding call.\n\nEnding turn; I'll fold the digests into \"kernel sweep\" once the benchmark lands."
+    }
+   ],
+   "api": "openai-completions",
+   "provider": "llm.myriad-dreamin.com",
+   "model": "deepseek-v4-flash-completion",
+   "usage": {
+    "input": 174,
+    "output": 164,
+    "cacheRead": 4096,
+    "cacheWrite": 0,
+    "totalTokens": 4434,
+    "cost": {
+     "input": 0,
+     "output": 0,
+     "cacheRead": 0,
+     "cacheWrite": 0,
+     "total": 0
+    }
+   },
+   "stopReason": "stop",
+   "timestamp": 1789623564233,
+   "responseId": "5dc968db-7962-440c-8099-fc11ea08d8a3",
+   "responseModel": "deepseek-flash"
+  },
+  {
+   "role": "fluvia-notify",
+   "text": "<fluvia-notify agent=\"pi\" session=\"web-20260917053913\">\n1 call settled — 1 ready.\n\nc7 benchmark done (wait 2.5s, run 3.5s) ⇒ report7 : Report gemm_4096_f32 on imagenet-mini: 2.437 ms/iter · 56397 GFLOP/s · occ 94%; err7 void\n</fluvia-notify>",
+   "count": 1,
+   "source": "live",
+   "timestamp": 1789623565938
+  },
+  {
+   "role": "assistant",
+   "content": [
+    {
+     "type": "thinking",
+     "thinking": "Everything settled. Now summarize as \"kernel sweep\". Include handles: kernel0 (or kernel3), report7, note6, maybe dataset2. Let's fold: summarize(kernel3, report7, note6, { title: \"kernel sweep\" }).\n\nMaybe include kernel0/kernel1 to show prepared specs. I'd include kernel1 too (the failed one's source). Let's do summarize(kernel1, kernel3, report7, note6, { title: \"kernel sweep\" }). Hmm, order: digest describing sweep. I'll include kernel0, kernel1, dataset2? summarize accepts kernels, reports, plans, notes. Dataset maybe not supported. Keep to kernels, report, note.\n\nsubmit: summarize(kernel0, kernel3, report7, note6, { title: \"kernel sweep\" })\n\nWait, kernel1 is fp8 spec that failed to compile — that's relevant context. Try summarize(kernel0, kernel1, kernel3, report7, note6, { title: \"kernel sweep\" }).\n\nThen end turn and report results.",
+     "thinkingSignature": "reasoning_content"
+    },
+    {
+     "type": "toolCall",
+     "id": "call_00_VywbmLyWBBm9s3NfRxI64683",
+     "name": "fluvia",
+     "arguments": {
+      "calls": "summarize(kernel0, kernel1, kernel3, report7, note6, { title: \"kernel sweep\" })"
+     }
+    }
+   ],
+   "api": "openai-completions",
+   "provider": "llm.myriad-dreamin.com",
+   "model": "deepseek-v4-flash-completion",
+   "usage": {
+    "input": 182,
+    "output": 290,
+    "cacheRead": 4352,
+    "cacheWrite": 0,
+    "totalTokens": 4824,
+    "cost": {
+     "input": 0,
+     "output": 0,
+     "cacheRead": 0,
+     "cacheWrite": 0,
+     "total": 0
+    }
+   },
+   "stopReason": "toolUse",
+   "timestamp": 1789623565939,
+   "responseId": "7555881a-def5-4172-a2dc-02aff1ad646e",
+   "responseModel": "deepseek-flash"
+  },
+  {
+   "role": "toolResult",
+   "toolCallId": "call_00_VywbmLyWBBm9s3NfRxI64683",
+   "toolName": "fluvia",
+   "content": [
+    {
+     "type": "text",
+     "text": "c9 summarize ⇒ digest9, err9 [running] — result arrives as a fluvia notification"
+    }
+   ],
+   "details": {
+    "lines": [
+     "summarize(kernel0, kernel1, kernel3, report7, note6, { title: \"kernel sweep\" })"
+    ],
+    "answers": [
+     "c9 summarize ⇒ digest9, err9 [running] — result arrives as a fluvia notification"
+    ]
+   },
+   "isError": false,
+   "timestamp": 1789623568045
+  },
+  {
+   "role": "assistant",
+   "content": [
+    {
+     "type": "text",
+     "text": "Everything has settled, so I folded the sweep into one digest (`c9`, title \"kernel sweep\") and am ending my turn. Final picture:\n\n| Item | Outcome |\n|---|---|\n| f32 4096 / sm90 spec | ✅ emitted (64×64 tiles, 690 lines) |\n| fp8 16384 / sm80 spec | ✅ emitted (64×64 tiles, 812 lines) |\n| imagenet-mini | ✅ loaded, 6 shards, 128k rows, 0.39 GB |\n| compile f32 opt 3 | ✅ `gemm_4096_f32`, 19.5 KiB cubin, 94% occupancy |\n| compile fp8 opt 3 | ❌ `KernelCompileError`: fp8 tensor cores not implemented on sm80 — recovery note: lower the dtype or retarget a newer arch |\n| benchmark | ✅ `gemm_4096_f32` on imagenet-mini: 2.437 ms/iter · 56397 GFLOP/s |\n| skipped branches | fp8 benchmark (void kernel), f32 recovery note (no error) — both free |\n\nDigest `digest9` is on its way; I'll relay it when it lands."
+    }
+   ],
+   "api": "openai-completions",
+   "provider": "llm.myriad-dreamin.com",
+   "model": "deepseek-v4-flash-completion",
+   "usage": {
+    "input": 248,
+    "output": 260,
+    "cacheRead": 4608,
+    "cacheWrite": 0,
+    "totalTokens": 5116,
+    "cost": {
+     "input": 0,
+     "output": 0,
+     "cacheRead": 0,
+     "cacheWrite": 0,
+     "total": 0
+    }
+   },
+   "stopReason": "stop",
+   "timestamp": 1789623568046,
+   "responseId": "0fde6685-f55c-4c43-be65-e728d366aad9",
+   "responseModel": "deepseek-flash"
+  },
+  {
+   "role": "fluvia-notify",
+   "text": "<fluvia-notify agent=\"pi\" session=\"web-20260917053913\">\n1 call settled — 1 ready.\n\nc9 summarize done (wait 0µs, run 324ms) ⇒ digest9 : Digest kernel sweep: 5 handles (3 Kernels, 1 Report, 1 Note); err9 void\n</fluvia-notify>",
+   "count": 1,
+   "source": "live",
+   "timestamp": 1789623568528
+  },
+  {
+   "role": "assistant",
+   "content": [
+    {
+     "type": "thinking",
+     "thinking": "Present final summary. Done.",
+     "thinkingSignature": "reasoning_content"
+    },
+    {
+     "type": "text",
+     "text": "## kernel sweep — complete\n\n**digest9** (kernel sweep): 5 handles folded — 3 Kernels, 1 Report, 1 Note. Everything in the pipeline settled; nothing is still running.\n\n**Prepared specs**\n- `kernel0` — 4096² matmul, f32, sm90, 64×64 tiles, row-major (690 lines)\n- `kernel1` — 16384² matmul, fp8, sm80, 64×64 tiles (812 lines)\n\n**Data**\n- `dataset2` — imagenet-mini/train, 6 shards, 128k rows, 0.39 GB, cached\n\n**Compile (opt 3)**\n- ✅ `kernel3` — `gemm_4096_f32`, 19.5 KiB cubin, 94% occupancy\n- ❌ `kernel4` void — `KernelCompileError`: *fp8 tensor cores are not implemented on sm80 (Ampere)*\n\n**Benchmark**\n- ✅ `report7` — `gemm_4096_f32` on imagenet-mini: **2.437 ms/iter · 56397 GFLOP/s · 94% occupancy**\n- fp8 branch benchmark auto-skipped (void kernel)\n\n**Recovery**\n- `note6` — for the KernelCompileError: lower the dtype to one the arch supports, or retarget a newer arch (e.g. sm90). The f32 recovery branch was skipped for free since that compile succeeded.\n\n**Takeaway:** the sm90 f32 path is healthy and fast (~56 TFLOP/s at 94% occupancy); the 16384 fp8 kernel is a dead end on sm80 hardware — re-emit it for sm90 or quantise to a supported narrower dtype, then recompile and benchmark."
+    }
+   ],
+   "api": "openai-completions",
+   "provider": "llm.myriad-dreamin.com",
+   "model": "deepseek-v4-flash-completion",
+   "usage": {
+    "input": 207,
+    "output": 398,
+    "cacheRead": 4992,
+    "cacheWrite": 0,
+    "totalTokens": 5597,
+    "cost": {
+     "input": 0,
+     "output": 0,
+     "cacheRead": 0,
+     "cacheWrite": 0,
+     "total": 0
+    }
+   },
+   "stopReason": "stop",
+   "timestamp": 1789623569974,
+   "responseId": "ad481f46-a793-443a-b604-ae6385cafc4f",
+   "responseModel": "deepseek-flash"
+  }
+ ],
+ "runtime": [
+  {
+   "seq": 0,
+   "t": 6182.4,
+   "k": "agent.input",
+   "agent": "pi",
+   "line": "prepareKernel({ size: 4096, dtype: \"f32\", arch: \"sm90\" })"
+  },
+  {
+   "seq": 1,
+   "t": 6184.6,
+   "k": "agent.join",
+   "agent": "pi"
+  },
+  {
+   "seq": 2,
+   "t": 6184.8,
+   "k": "call.submit",
+   "agent": "pi",
+   "call": "c0",
+   "fn": "prepareKernel",
+   "args": [
+    {
+     "n": "obj",
+     "props": [
+      {
+       "key": "size",
+       "value": {
+        "n": "lit",
+        "v": 4096
+       }
+      },
+      {
+       "key": "dtype",
+       "value": {
+        "n": "lit",
+        "v": "f32"
+       }
+      },
+      {
+       "key": "arch",
+       "value": {
+        "n": "lit",
+        "v": "sm90"
+       }
+      }
+     ]
+    }
+   ],
+   "deps": [],
+   "bind": {
+    "value": "kernel0",
+    "error": "err0"
+   },
+   "handles": {
+    "value": "h0",
+    "error": "h1"
+   }
+  },
+  {
+   "seq": 3,
+   "t": 6184.9,
+   "k": "call.queued",
+   "call": "c0",
+   "blockedMs": 0
+  },
+  {
+   "seq": 4,
+   "t": 6184.9,
+   "k": "call.start",
+   "call": "c0",
+   "waitedMs": 0.1
+  },
+  {
+   "seq": 5,
+   "t": 6185.2,
+   "k": "call.progress",
+   "call": "c0",
+   "note": "resolving sm90 (Hopper) descriptor",
+   "pct": 10
+  },
+  {
+   "seq": 6,
+   "t": 6185.4,
+   "k": "agent.input",
+   "agent": "pi",
+   "line": "prepareKernel({ size: 16384, dtype: \"fp8\", arch: \"sm80\" })"
+  },
+  {
+   "seq": 7,
+   "t": 6185.6,
+   "k": "call.submit",
+   "agent": "pi",
+   "call": "c1",
+   "fn": "prepareKernel",
+   "args": [
+    {
+     "n": "obj",
+     "props": [
+      {
+       "key": "size",
+       "value": {
+        "n": "lit",
+        "v": 16384
+       }
+      },
+      {
+       "key": "dtype",
+       "value": {
+        "n": "lit",
+        "v": "fp8"
+       }
+      },
+      {
+       "key": "arch",
+       "value": {
+        "n": "lit",
+        "v": "sm80"
+       }
+      }
+     ]
+    }
+   ],
+   "deps": [],
+   "bind": {
+    "value": "kernel1",
+    "error": "err1"
+   },
+   "handles": {
+    "value": "h2",
+    "error": "h3"
+   }
+  },
+  {
+   "seq": 8,
+   "t": 6185.6,
+   "k": "call.queued",
+   "call": "c1",
+   "blockedMs": 0
+  },
+  {
+   "seq": 9,
+   "t": 6185.6,
+   "k": "call.start",
+   "call": "c1",
+   "waitedMs": 0
+  },
+  {
+   "seq": 10,
+   "t": 6185.7,
+   "k": "call.progress",
+   "call": "c1",
+   "note": "resolving sm80 (Ampere) descriptor",
+   "pct": 10
+  },
+  {
+   "seq": 11,
+   "t": 6185.7,
+   "k": "agent.input",
+   "agent": "pi",
+   "line": "loadDataset({ name: \"imagenet-mini\", shards: 6 })"
+  },
+  {
+   "seq": 12,
+   "t": 6185.9,
+   "k": "call.submit",
+   "agent": "pi",
+   "call": "c2",
+   "fn": "loadDataset",
+   "args": [
+    {
+     "n": "obj",
+     "props": [
+      {
+       "key": "name",
+       "value": {
+        "n": "lit",
+        "v": "imagenet-mini"
+       }
+      },
+      {
+       "key": "shards",
+       "value": {
+        "n": "lit",
+        "v": 6
+       }
+      }
+     ]
+    }
+   ],
+   "deps": [],
+   "bind": {
+    "value": "dataset2",
+    "error": "err2"
+   },
+   "handles": {
+    "value": "h4",
+    "error": "h5"
+   }
+  },
+  {
+   "seq": 13,
+   "t": 6185.9,
+   "k": "call.queued",
+   "call": "c2",
+   "blockedMs": 0
+  },
+  {
+   "seq": 14,
+   "t": 6186,
+   "k": "call.start",
+   "call": "c2",
+   "waitedMs": 0.1
+  },
+  {
+   "seq": 15,
+   "t": 6186.2,
+   "k": "call.progress",
+   "call": "c2",
+   "note": "shard 1/6 (train)",
+   "pct": 16
+  },
+  {
+   "seq": 16,
+   "t": 6186.2,
+   "k": "agent.input",
+   "agent": "pi",
+   "line": "compileKernel(kernel0, { opt: 3 })"
+  },
+  {
+   "seq": 17,
+   "t": 6186.4,
+   "k": "call.submit",
+   "agent": "pi",
+   "call": "c3",
+   "fn": "compileKernel",
+   "args": [
+    {
+     "n": "ref",
+     "name": "kernel0",
+     "handle": "h0"
+    },
+    {
+     "n": "obj",
+     "props": [
+      {
+       "key": "opt",
+       "value": {
+        "n": "lit",
+        "v": 3
+       }
+      }
+     ]
+    }
+   ],
+   "deps": [
+    {
+     "handle": "h0",
+     "name": "kernel0",
+     "kind": "value",
+     "from": "c0"
+    }
+   ],
+   "bind": {
+    "value": "kernel3",
+    "error": "err3"
+   },
+   "handles": {
+    "value": "h6",
+    "error": "h7"
+   }
+  },
+  {
+   "seq": 18,
+   "t": 6186.4,
+   "k": "agent.input",
+   "agent": "pi",
+   "line": "compileKernel(kernel1, { opt: 3 })"
+  },
+  {
+   "seq": 19,
+   "t": 6186.8,
+   "k": "call.submit",
+   "agent": "pi",
+   "call": "c4",
+   "fn": "compileKernel",
+   "args": [
+    {
+     "n": "ref",
+     "name": "kernel1",
+     "handle": "h2"
+    },
+    {
+     "n": "obj",
+     "props": [
+      {
+       "key": "opt",
+       "value": {
+        "n": "lit",
+        "v": 3
+       }
+      }
+     ]
+    }
+   ],
+   "deps": [
+    {
+     "handle": "h2",
+     "name": "kernel1",
+     "kind": "value",
+     "from": "c1"
+    }
+   ],
+   "bind": {
+    "value": "kernel4",
+    "error": "err4"
+   },
+   "handles": {
+    "value": "h8",
+    "error": "h9"
+   }
+  },
+  {
+   "seq": 20,
+   "t": 6186.8,
+   "k": "agent.input",
+   "agent": "pi",
+   "line": "recover(err3)"
+  },
+  {
+   "seq": 21,
+   "t": 6186.9,
+   "k": "call.submit",
+   "agent": "pi",
+   "call": "c5",
+   "fn": "recover",
+   "args": [
+    {
+     "n": "ref",
+     "name": "err3",
+     "handle": "h7"
+    }
+   ],
+   "deps": [
+    {
+     "handle": "h7",
+     "name": "err3",
+     "kind": "error",
+     "from": "c3"
+    }
+   ],
+   "bind": {
+    "value": "note5",
+    "error": "err5"
+   },
+   "handles": {
+    "value": "h10",
+    "error": "h11"
+   }
+  },
+  {
+   "seq": 22,
+   "t": 6187,
+   "k": "agent.input",
+   "agent": "pi",
+   "line": "recover(err4)"
+  },
+  {
+   "seq": 23,
+   "t": 6187,
+   "k": "call.submit",
+   "agent": "pi",
+   "call": "c6",
+   "fn": "recover",
+   "args": [
+    {
+     "n": "ref",
+     "name": "err4",
+     "handle": "h9"
+    }
+   ],
+   "deps": [
+    {
+     "handle": "h9",
+     "name": "err4",
+     "kind": "error",
+     "from": "c4"
+    }
+   ],
+   "bind": {
+    "value": "note6",
+    "error": "err6"
+   },
+   "handles": {
+    "value": "h12",
+    "error": "h13"
+   }
+  },
+  {
+   "seq": 24,
+   "t": 6187,
+   "k": "agent.input",
+   "agent": "pi",
+   "line": "benchmark(kernel3, dataset2)"
+  },
+  {
+   "seq": 25,
+   "t": 6187.1,
+   "k": "call.submit",
+   "agent": "pi",
+   "call": "c7",
+   "fn": "benchmark",
+   "args": [
+    {
+     "n": "ref",
+     "name": "kernel3",
+     "handle": "h6"
+    },
+    {
+     "n": "ref",
+     "name": "dataset2",
+     "handle": "h4"
+    }
+   ],
+   "deps": [
+    {
+     "handle": "h6",
+     "name": "kernel3",
+     "kind": "value",
+     "from": "c3"
+    },
+    {
+     "handle": "h4",
+     "name": "dataset2",
+     "kind": "value",
+     "from": "c2"
+    }
+   ],
+   "bind": {
+    "value": "report7",
+    "error": "err7"
+   },
+   "handles": {
+    "value": "h14",
+    "error": "h15"
+   }
+  },
+  {
+   "seq": 26,
+   "t": 6187.1,
+   "k": "agent.input",
+   "agent": "pi",
+   "line": "benchmark(kernel4, dataset2)"
+  },
+  {
+   "seq": 27,
+   "t": 6187.3,
+   "k": "call.submit",
+   "agent": "pi",
+   "call": "c8",
+   "fn": "benchmark",
+   "args": [
+    {
+     "n": "ref",
+     "name": "kernel4",
+     "handle": "h8"
+    },
+    {
+     "n": "ref",
+     "name": "dataset2",
+     "handle": "h4"
+    }
+   ],
+   "deps": [
+    {
+     "handle": "h8",
+     "name": "kernel4",
+     "kind": "value",
+     "from": "c4"
+    },
+    {
+     "handle": "h4",
+     "name": "dataset2",
+     "kind": "value",
+     "from": "c2"
+    }
+   ],
+   "bind": {
+    "value": "report8",
+    "error": "err8"
+   },
+   "handles": {
+    "value": "h16",
+    "error": "h17"
+   }
+  },
+  {
+   "seq": 28,
+   "t": 6264.6,
+   "k": "call.progress",
+   "call": "c1",
+   "note": "planning 64x64 tiles for 16384x16384",
+   "pct": 45
+  },
+  {
+   "seq": 29,
+   "t": 6264.6,
+   "k": "call.progress",
+   "call": "c0",
+   "note": "planning 64x64 tiles for 4096x4096",
+   "pct": 45
+  },
+  {
+   "seq": 30,
+   "t": 6374.2,
+   "k": "call.progress",
+   "call": "c2",
+   "note": "shard 2/6 (train)",
+   "pct": 32
+  },
+  {
+   "seq": 31,
+   "t": 6483.2,
+   "k": "call.progress",
+   "call": "c0",
+   "note": "allocating shared memory and registers",
+   "pct": 80
+  },
+  {
+   "seq": 32,
+   "t": 6546.6,
+   "k": "call.progress",
+   "call": "c2",
+   "note": "shard 3/6 (train)",
+   "pct": 48
+  },
+  {
+   "seq": 33,
+   "t": 6650.1,
+   "k": "call.progress",
+   "call": "c0",
+   "note": "source ready: 690 lines",
+   "pct": 100
+  },
+  {
+   "seq": 34,
+   "t": 6650.5,
+   "k": "handle.settle",
+   "handle": "h0",
+   "name": "kernel0",
+   "call": "c0",
+   "kind": "value",
+   "state": "ready",
+   "type": "Kernel",
+   "summary": "4096x4096 f32 matmul · 64x64 tiles · source (690 lines)"
+  },
+  {
+   "seq": 35,
+   "t": 6650.5,
+   "k": "handle.settle",
+   "handle": "h1",
+   "name": "err0",
+   "call": "c0",
+   "kind": "error",
+   "state": "void"
+  },
+  {
+   "seq": 36,
+   "t": 6650.5,
+   "k": "call.settle",
+   "call": "c0",
+   "outcome": "done",
+   "runMs": 465.4,
+   "totalMs": 465.5,
+   "value": {
+    "type": "Kernel",
+    "summary": "4096x4096 f32 matmul · 64x64 tiles · source (690 lines)"
+   }
+  },
+  {
+   "seq": 37,
+   "t": 6650.7,
+   "k": "notify.emit",
+   "id": "n0",
+   "call": "c0",
+   "agent": "pi",
+   "outcome": "done"
+  },
+  {
+   "seq": 38,
+   "t": 6650.8,
+   "k": "call.queued",
+   "call": "c3",
+   "blockedMs": 464.4
+  },
+  {
+   "seq": 39,
+   "t": 6650.8,
+   "k": "call.start",
+   "call": "c3",
+   "waitedMs": 464.4
+  },
+  {
+   "seq": 40,
+   "t": 6650.9,
+   "k": "cli.output",
+   "agent": "pi",
+   "level": "notify",
+   "text": "← c0 prepareKernel done (wait 100µs, run 465ms) ⇒ kernel0 : Kernel 4096x4096 f32 matmul · 64x64 tiles · source (690 lines); err0 void\n    now runnable: c3"
+  },
+  {
+   "seq": 41,
+   "t": 6651,
+   "k": "call.progress",
+   "call": "c3",
+   "note": "parsing gemm_4096_f32 (690 lines)",
+   "pct": 12
+  },
+  {
+   "seq": 42,
+   "t": 6651.2,
+   "k": "notify.deliver",
+   "id": [
+    "n0"
+   ],
+   "sink": "stdout",
+   "agent": "pi",
+   "latencyMs": 0.5,
+   "bytes": 155
+  },
+  {
+   "seq": 43,
+   "t": 6651.2,
+   "k": "call.progress",
+   "call": "c2",
+   "note": "shard 4/6 (train)",
+   "pct": 63
+  },
+  {
+   "seq": 44,
+   "t": 6666.6,
+   "k": "call.progress",
+   "call": "c1",
+   "note": "allocating shared memory and registers",
+   "pct": 80
+  },
+  {
+   "seq": 45,
+   "t": 6766.8,
+   "k": "call.progress",
+   "call": "c1",
+   "note": "source ready: 812 lines",
+   "pct": 100
+  },
+  {
+   "seq": 46,
+   "t": 6766.8,
+   "k": "handle.settle",
+   "handle": "h2",
+   "name": "kernel1",
+   "call": "c1",
+   "kind": "value",
+   "state": "ready",
+   "type": "Kernel",
+   "summary": "16384x16384 fp8 matmul · 64x64 tiles · source (812 lines)"
+  },
+  {
+   "seq": 47,
+   "t": 6766.8,
+   "k": "handle.settle",
+   "handle": "h3",
+   "name": "err1",
+   "call": "c1",
+   "kind": "error",
+   "state": "void"
+  },
+  {
+   "seq": 48,
+   "t": 6766.8,
+   "k": "call.settle",
+   "call": "c1",
+   "outcome": "done",
+   "runMs": 581.2,
+   "totalMs": 581.2,
+   "value": {
+    "type": "Kernel",
+    "summary": "16384x16384 fp8 matmul · 64x64 tiles · source (812 lines)"
+   }
+  },
+  {
+   "seq": 49,
+   "t": 6766.9,
+   "k": "notify.emit",
+   "id": "n1",
+   "call": "c1",
+   "agent": "pi",
+   "outcome": "done"
+  },
+  {
+   "seq": 50,
+   "t": 6767,
+   "k": "call.queued",
+   "call": "c4",
+   "blockedMs": 580.3
+  },
+  {
+   "seq": 51,
+   "t": 6767.1,
+   "k": "call.start",
+   "call": "c4",
+   "waitedMs": 580.4
+  },
+  {
+   "seq": 52,
+   "t": 6767.2,
+   "k": "cli.output",
+   "agent": "pi",
+   "level": "notify",
+   "text": "← c1 prepareKernel done (wait 0µs, run 581ms) ⇒ kernel1 : Kernel 16384x16384 fp8 matmul · 64x64 tiles · source (812 lines); err1 void\n    now runnable: c4"
+  },
+  {
+   "seq": 53,
+   "t": 6767.3,
+   "k": "call.progress",
+   "call": "c4",
+   "note": "parsing gemm_16384_fp8 (812 lines)",
+   "pct": 12
+  },
+  {
+   "seq": 54,
+   "t": 6767.3,
+   "k": "notify.deliver",
+   "id": [
+    "n1"
+   ],
+   "sink": "stdout",
+   "agent": "pi",
+   "latencyMs": 0.4,
+   "bytes": 155
+  },
+  {
+   "seq": 55,
+   "t": 6767.3,
+   "k": "call.progress",
+   "call": "c2",
+   "note": "shard 5/6 (train)",
+   "pct": 79
+  },
+  {
+   "seq": 56,
+   "t": 6815.8,
+   "k": "call.progress",
+   "call": "c3",
+   "note": "lowering to PTX (opt 3)",
+   "pct": 45
+  },
+  {
+   "seq": 57,
+   "t": 6850.1,
+   "k": "handle.settle",
+   "handle": "h9",
+   "name": "err4",
+   "call": "c4",
+   "kind": "error",
+   "state": "ready",
+   "type": "KernelCompileError",
+   "summary": "compileKernel: fp8 tensor cores are not implemented on sm80 (Ampere)"
+  },
+  {
+   "seq": 58,
+   "t": 6850.1,
+   "k": "handle.settle",
+   "handle": "h8",
+   "name": "kernel4",
+   "call": "c4",
+   "kind": "value",
+   "state": "void"
+  },
+  {
+   "seq": 59,
+   "t": 6850.2,
+   "k": "call.settle",
+   "call": "c4",
+   "outcome": "failed",
+   "runMs": 83,
+   "totalMs": 663.4,
+   "error": {
+    "kind": "KernelCompileError",
+    "message": "compileKernel: fp8 tensor cores are not implemented on sm80 (Ampere)",
+    "detail": {
+     "dtype": "fp8",
+     "arch": "sm80",
+     "supported": [
+      "f32",
+      "f16",
+      "bf16",
+      "int8"
+     ],
+     "pass": "lower-tensorop"
+    },
+    "retryable": false
+   }
+  },
+  {
+   "seq": 60,
+   "t": 6850.2,
+   "k": "notify.emit",
+   "id": "n2",
+   "call": "c4",
+   "agent": "pi",
+   "outcome": "failed"
+  },
+  {
+   "seq": 61,
+   "t": 6850.3,
+   "k": "handle.settle",
+   "handle": "h16",
+   "name": "report8",
+   "call": "c8",
+   "kind": "value",
+   "state": "void"
+  },
+  {
+   "seq": 62,
+   "t": 6850.3,
+   "k": "handle.settle",
+   "handle": "h17",
+   "name": "err8",
+   "call": "c8",
+   "kind": "error",
+   "state": "void"
+  },
+  {
+   "seq": 63,
+   "t": 6850.3,
+   "k": "call.settle",
+   "call": "c8",
+   "outcome": "skipped",
+   "runMs": 0,
+   "totalMs": 663,
+   "skip": {
+    "reason": "upstream_failed",
+    "from": "c4"
+   }
+  },
+  {
+   "seq": 64,
+   "t": 6850.4,
+   "k": "notify.emit",
+   "id": "n3",
+   "call": "c8",
+   "agent": "pi",
+   "outcome": "skipped"
+  },
+  {
+   "seq": 65,
+   "t": 6850.4,
+   "k": "call.queued",
+   "call": "c6",
+   "blockedMs": 663.4
+  },
+  {
+   "seq": 66,
+   "t": 6850.4,
+   "k": "call.start",
+   "call": "c6",
+   "waitedMs": 663.4
+  },
+  {
+   "seq": 67,
+   "t": 6850.5,
+   "k": "cli.output",
+   "agent": "pi",
+   "level": "notify",
+   "text": "← c4 compileKernel failed (wait 580ms, run 83ms) ⇒ err4 : KernelCompileError \"compileKernel: fp8 tensor cores are not implemented on sm80 (Ampere)\"; kernel4 void\n    now runnable: c6"
+  },
+  {
+   "seq": 68,
+   "t": 6850.5,
+   "k": "cli.output",
+   "agent": "pi",
+   "level": "notify",
+   "text": "← c8 benchmark skipped — c4 failed, so the value handle it consumes is void"
+  },
+  {
+   "seq": 69,
+   "t": 6850.6,
+   "k": "call.progress",
+   "call": "c6",
+   "note": "selecting strategy for KernelCompileError",
+   "pct": 20
+  },
+  {
+   "seq": 70,
+   "t": 6850.7,
+   "k": "notify.deliver",
+   "id": [
+    "n2"
+   ],
+   "sink": "stdout",
+   "agent": "pi",
+   "latencyMs": 0.5,
+   "bytes": 180
+  },
+  {
+   "seq": 71,
+   "t": 6850.7,
+   "k": "notify.deliver",
+   "id": [
+    "n3"
+   ],
+   "sink": "stdout",
+   "agent": "pi",
+   "latencyMs": 0.3,
+   "bytes": 75
+  },
+  {
+   "seq": 72,
+   "t": 6878.7,
+   "k": "call.progress",
+   "call": "c2",
+   "note": "shard 6/6 (train)",
+   "pct": 95
+  },
+  {
+   "seq": 73,
+   "t": 6966.8,
+   "k": "call.progress",
+   "call": "c6",
+   "note": "rewriting the failing arguments",
+   "pct": 55
+  },
+  {
+   "seq": 74,
+   "t": 7000.4,
+   "k": "call.progress",
+   "call": "c2",
+   "note": "0.39 GB resident",
+   "pct": 100
+  },
+  {
+   "seq": 75,
+   "t": 7000.5,
+   "k": "handle.settle",
+   "handle": "h4",
+   "name": "dataset2",
+   "call": "c2",
+   "kind": "value",
+   "state": "ready",
+   "type": "Dataset",
+   "summary": "imagenet-mini/train · 6 shards · 128k rows · 0.39 GB"
+  },
+  {
+   "seq": 76,
+   "t": 7000.5,
+   "k": "handle.settle",
+   "handle": "h5",
+   "name": "err2",
+   "call": "c2",
+   "kind": "error",
+   "state": "void"
+  },
+  {
+   "seq": 77,
+   "t": 7000.5,
+   "k": "call.settle",
+   "call": "c2",
+   "outcome": "done",
+   "runMs": 814.5,
+   "totalMs": 814.6,
+   "value": {
+    "type": "Dataset",
+    "summary": "imagenet-mini/train · 6 shards · 128k rows · 0.39 GB"
+   }
+  },
+  {
+   "seq": 78,
+   "t": 7000.5,
+   "k": "notify.emit",
+   "id": "n4",
+   "call": "c2",
+   "agent": "pi",
+   "outcome": "done"
+  },
+  {
+   "seq": 79,
+   "t": 7000.6,
+   "k": "cli.output",
+   "agent": "pi",
+   "level": "notify",
+   "text": "← c2 loadDataset done (wait 100µs, run 815ms) ⇒ dataset2 : Dataset imagenet-mini/train · 6 shards · 128k rows · 0.39 GB; err2 void"
+  },
+  {
+   "seq": 80,
+   "t": 7000.7,
+   "k": "notify.deliver",
+   "id": [
+    "n4"
+   ],
+   "sink": "stdout",
+   "agent": "pi",
+   "latencyMs": 0.2,
+   "bytes": 134
+  },
+  {
+   "seq": 81,
+   "t": 7636.4,
+   "k": "call.progress",
+   "call": "c3",
+   "note": "assembling cubin and running peephole passes",
+   "pct": 85
+  },
+  {
+   "seq": 82,
+   "t": 7687.1,
+   "k": "call.progress",
+   "call": "c6",
+   "note": "validating the proposed call",
+   "pct": 85
+  },
+  {
+   "seq": 83,
+   "t": 8724.2,
+   "k": "call.progress",
+   "call": "c6",
+   "note": "plan ready · confidence 71%",
+   "pct": 100
+  },
+  {
+   "seq": 84,
+   "t": 8725.1,
+   "k": "handle.settle",
+   "handle": "h12",
+   "name": "note6",
+   "call": "c6",
+   "kind": "value",
+   "state": "ready",
+   "type": "Note",
+   "summary": "recovery for KernelCompileError: lower the dtype to one the arch supports, or retarget a newer …"
+  },
+  {
+   "seq": 85,
+   "t": 8725.1,
+   "k": "handle.settle",
+   "handle": "h13",
+   "name": "err6",
+   "call": "c6",
+   "kind": "error",
+   "state": "void"
+  },
+  {
+   "seq": 86,
+   "t": 8725.2,
+   "k": "call.settle",
+   "call": "c6",
+   "outcome": "done",
+   "runMs": 1874.6,
+   "totalMs": 2538,
+   "value": {
+    "type": "Note",
+    "summary": "recovery for KernelCompileError: lower the dtype to one the arch supports, or retarget a newer …"
+   }
+  },
+  {
+   "seq": 87,
+   "t": 8725.4,
+   "k": "notify.emit",
+   "id": "n5",
+   "call": "c6",
+   "agent": "pi",
+   "outcome": "done"
+  },
+  {
+   "seq": 88,
+   "t": 8725.6,
+   "k": "cli.output",
+   "agent": "pi",
+   "level": "notify",
+   "text": "← c6 recover done (wait 663ms, run 1.9s) ⇒ note6 : Note recovery for KernelCompileError: lower the dtype to one the arch supports, or retarget a newer …; err6 void"
+  },
+  {
+   "seq": 89,
+   "t": 8725.6,
+   "k": "notify.deliver",
+   "id": [
+    "n5"
+   ],
+   "sink": "stdout",
+   "agent": "pi",
+   "latencyMs": 0.3,
+   "bytes": 165
+  },
+  {
+   "seq": 90,
+   "t": 8725.7,
+   "k": "call.progress",
+   "call": "c3",
+   "note": "cubin 19.5 KiB · occupancy 94%",
+   "pct": 100
+  },
+  {
+   "seq": 91,
+   "t": 8725.8,
+   "k": "handle.settle",
+   "handle": "h6",
+   "name": "kernel3",
+   "call": "c3",
+   "kind": "value",
+   "state": "ready",
+   "type": "Kernel",
+   "summary": "gemm_4096_f32 compiled · opt 3 · 19.5 KiB cubin · 94% occupancy"
+  },
+  {
+   "seq": 92,
+   "t": 8725.8,
+   "k": "handle.settle",
+   "handle": "h7",
+   "name": "err3",
+   "call": "c3",
+   "kind": "error",
+   "state": "void"
+  },
+  {
+   "seq": 93,
+   "t": 8725.9,
+   "k": "call.settle",
+   "call": "c3",
+   "outcome": "done",
+   "runMs": 2074.9,
+   "totalMs": 2539.3,
+   "value": {
+    "type": "Kernel",
+    "summary": "gemm_4096_f32 compiled · opt 3 · 19.5 KiB cubin · 94% occupancy"
+   }
+  },
+  {
+   "seq": 94,
+   "t": 8726,
+   "k": "notify.emit",
+   "id": "n6",
+   "call": "c3",
+   "agent": "pi",
+   "outcome": "done"
+  },
+  {
+   "seq": 95,
+   "t": 8726.1,
+   "k": "call.queued",
+   "call": "c7",
+   "blockedMs": 2539
+  },
+  {
+   "seq": 96,
+   "t": 8726.1,
+   "k": "call.start",
+   "call": "c7",
+   "waitedMs": 2539
+  },
+  {
+   "seq": 97,
+   "t": 8726.3,
+   "k": "handle.settle",
+   "handle": "h10",
+   "name": "note5",
+   "call": "c5",
+   "kind": "value",
+   "state": "void"
+  },
+  {
+   "seq": 98,
+   "t": 8726.4,
+   "k": "handle.settle",
+   "handle": "h11",
+   "name": "err5",
+   "call": "c5",
+   "kind": "error",
+   "state": "void"
+  },
+  {
+   "seq": 99,
+   "t": 8726.4,
+   "k": "call.settle",
+   "call": "c5",
+   "outcome": "skipped",
+   "runMs": 0,
+   "totalMs": 2539.4,
+   "skip": {
+    "reason": "upstream_ok",
+    "from": "c3"
+   }
+  },
+  {
+   "seq": 100,
+   "t": 8726.4,
+   "k": "notify.emit",
+   "id": "n7",
+   "call": "c5",
+   "agent": "pi",
+   "outcome": "skipped"
+  },
+  {
+   "seq": 101,
+   "t": 8726.5,
+   "k": "cli.output",
+   "agent": "pi",
+   "level": "notify",
+   "text": "← c3 compileKernel done (wait 464ms, run 2.1s) ⇒ kernel3 : Kernel gemm_4096_f32 compiled · opt 3 · 19.5 KiB cubin · 94% occupancy; err3 void\n    now runnable: c7"
+  },
+  {
+   "seq": 102,
+   "t": 8726.9,
+   "k": "call.progress",
+   "call": "c7",
+   "note": "warmup 10 iters",
+   "pct": 10
+  },
+  {
+   "seq": 103,
+   "t": 8726.9,
+   "k": "cli.output",
+   "agent": "pi",
+   "level": "notify",
+   "text": "← c5 recover skipped — c3 succeeded, so the error handle it consumes is void"
+  },
+  {
+   "seq": 104,
+   "t": 8727,
+   "k": "notify.deliver",
+   "id": [
+    "n6"
+   ],
+   "sink": "stdout",
+   "agent": "pi",
+   "latencyMs": 1,
+   "bytes": 162
+  },
+  {
+   "seq": 105,
+   "t": 8727.1,
+   "k": "notify.deliver",
+   "id": [
+    "n7"
+   ],
+   "sink": "stdout",
+   "agent": "pi",
+   "latencyMs": 0.7,
+   "bytes": 76
+  },
+  {
+   "seq": 106,
+   "t": 9713.8,
+   "k": "call.progress",
+   "call": "c7",
+   "note": "measuring 25/100 iters",
+   "pct": 30
+  },
+  {
+   "seq": 107,
+   "t": 10725.6,
+   "k": "call.progress",
+   "call": "c7",
+   "note": "measuring 50/100 iters",
+   "pct": 50
+  },
+  {
+   "seq": 108,
+   "t": 11386.2,
+   "k": "call.progress",
+   "call": "c7",
+   "note": "measuring 75/100 iters",
+   "pct": 70
+  },
+  {
+   "seq": 109,
+   "t": 11804.9,
+   "k": "call.progress",
+   "call": "c7",
+   "note": "measuring 100/100 iters",
+   "pct": 90
+  },
+  {
+   "seq": 110,
+   "t": 12255.1,
+   "k": "call.progress",
+   "call": "c7",
+   "note": "2.437 ms/iter · 56397 GFLOP/s",
+   "pct": 100
+  },
+  {
+   "seq": 111,
+   "t": 12255.2,
+   "k": "handle.settle",
+   "handle": "h14",
+   "name": "report7",
+   "call": "c7",
+   "kind": "value",
+   "state": "ready",
+   "type": "Report",
+   "summary": "gemm_4096_f32 on imagenet-mini: 2.437 ms/iter · 56397 GFLOP/s · occ 94%"
+  },
+  {
+   "seq": 112,
+   "t": 12255.2,
+   "k": "handle.settle",
+   "handle": "h15",
+   "name": "err7",
+   "call": "c7",
+   "kind": "error",
+   "state": "void"
+  },
+  {
+   "seq": 113,
+   "t": 12255.2,
+   "k": "call.settle",
+   "call": "c7",
+   "outcome": "done",
+   "runMs": 3529.1,
+   "totalMs": 6068.1,
+   "value": {
+    "type": "Report",
+    "summary": "gemm_4096_f32 on imagenet-mini: 2.437 ms/iter · 56397 GFLOP/s · occ 94%"
+   }
+  },
+  {
+   "seq": 114,
+   "t": 12255.3,
+   "k": "notify.emit",
+   "id": "n8",
+   "call": "c7",
+   "agent": "pi",
+   "outcome": "done"
+  },
+  {
+   "seq": 115,
+   "t": 12255.4,
+   "k": "cli.output",
+   "agent": "pi",
+   "level": "notify",
+   "text": "← c7 benchmark done (wait 2.5s, run 3.5s) ⇒ report7 : Report gemm_4096_f32 on imagenet-mini: 2.437 ms/iter · 56397 GFLOP/s · occ 94%; err7 void"
+  },
+  {
+   "seq": 116,
+   "t": 12255.6,
+   "k": "notify.deliver",
+   "id": [
+    "n8"
+   ],
+   "sink": "stdout",
+   "agent": "pi",
+   "latencyMs": 0.3,
+   "bytes": 145
+  },
+  {
+   "seq": 117,
+   "t": 14516,
+   "k": "agent.input",
+   "agent": "pi",
+   "line": "summarize(kernel0, kernel1, kernel3, report7, note6, { title: \"kernel sweep\" })"
+  },
+  {
+   "seq": 118,
+   "t": 14516.6,
+   "k": "call.submit",
+   "agent": "pi",
+   "call": "c9",
+   "fn": "summarize",
+   "args": [
+    {
+     "n": "ref",
+     "name": "kernel0",
+     "handle": "h0"
+    },
+    {
+     "n": "ref",
+     "name": "kernel1",
+     "handle": "h2"
+    },
+    {
+     "n": "ref",
+     "name": "kernel3",
+     "handle": "h6"
+    },
+    {
+     "n": "ref",
+     "name": "report7",
+     "handle": "h14"
+    },
+    {
+     "n": "ref",
+     "name": "note6",
+     "handle": "h12"
+    },
+    {
+     "n": "obj",
+     "props": [
+      {
+       "key": "title",
+       "value": {
+        "n": "lit",
+        "v": "kernel sweep"
+       }
+      }
+     ]
+    }
+   ],
+   "deps": [
+    {
+     "handle": "h0",
+     "name": "kernel0",
+     "kind": "value",
+     "from": "c0"
+    },
+    {
+     "handle": "h2",
+     "name": "kernel1",
+     "kind": "value",
+     "from": "c1"
+    },
+    {
+     "handle": "h6",
+     "name": "kernel3",
+     "kind": "value",
+     "from": "c3"
+    },
+    {
+     "handle": "h14",
+     "name": "report7",
+     "kind": "value",
+     "from": "c7"
+    },
+    {
+     "handle": "h12",
+     "name": "note6",
+     "kind": "value",
+     "from": "c6"
+    }
+   ],
+   "bind": {
+    "value": "digest9",
+    "error": "err9"
+   },
+   "handles": {
+    "value": "h18",
+    "error": "h19"
+   }
+  },
+  {
+   "seq": 119,
+   "t": 14516.6,
+   "k": "call.queued",
+   "call": "c9",
+   "blockedMs": 0
+  },
+  {
+   "seq": 120,
+   "t": 14516.7,
+   "k": "call.start",
+   "call": "c9",
+   "waitedMs": 0
+  },
+  {
+   "seq": 121,
+   "t": 14517,
+   "k": "call.progress",
+   "call": "c9",
+   "note": "collecting 5 handles",
+   "pct": 35
+  },
+  {
+   "seq": 122,
+   "t": 14606.3,
+   "k": "call.progress",
+   "call": "c9",
+   "note": "rendering digest",
+   "pct": 80
+  },
+  {
+   "seq": 123,
+   "t": 14840,
+   "k": "call.progress",
+   "call": "c9",
+   "note": "digest ready",
+   "pct": 100
+  },
+  {
+   "seq": 124,
+   "t": 14840.1,
+   "k": "handle.settle",
+   "handle": "h18",
+   "name": "digest9",
+   "call": "c9",
+   "kind": "value",
+   "state": "ready",
+   "type": "Digest",
+   "summary": "kernel sweep: 5 handles (3 Kernels, 1 Report, 1 Note)"
+  },
+  {
+   "seq": 125,
+   "t": 14840.1,
+   "k": "handle.settle",
+   "handle": "h19",
+   "name": "err9",
+   "call": "c9",
+   "kind": "error",
+   "state": "void"
+  },
+  {
+   "seq": 126,
+   "t": 14840.1,
+   "k": "call.settle",
+   "call": "c9",
+   "outcome": "done",
+   "runMs": 323.5,
+   "totalMs": 323.5,
+   "value": {
+    "type": "Digest",
+    "summary": "kernel sweep: 5 handles (3 Kernels, 1 Report, 1 Note)"
+   }
+  },
+  {
+   "seq": 127,
+   "t": 14840.2,
+   "k": "notify.emit",
+   "id": "n9",
+   "call": "c9",
+   "agent": "pi",
+   "outcome": "done"
+  },
+  {
+   "seq": 128,
+   "t": 14840.3,
+   "k": "cli.output",
+   "agent": "pi",
+   "level": "notify",
+   "text": "← c9 summarize done (wait 0µs, run 324ms) ⇒ digest9 : Digest kernel sweep: 5 handles (3 Kernels, 1 Report, 1 Note); err9 void"
+  },
+  {
+   "seq": 129,
+   "t": 14840.3,
+   "k": "notify.deliver",
+   "id": [
+    "n9"
+   ],
+   "sink": "stdout",
+   "agent": "pi",
+   "latencyMs": 0.2,
+   "bytes": 126
+  }
+ ]
+}

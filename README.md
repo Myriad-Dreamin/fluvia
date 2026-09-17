@@ -187,6 +187,104 @@ pnpm bench replay --trace out/<session>.jsonl.gz --from 9 --to 25 --concurrency 
 pnpm bench:page   # builds out/bench-page/index.html, the interactive demo of both modes
 ```
 
+## Benchmark cases
+
+A slice answers *what happened*. A **case** is the layer that says what was
+supposed to happen: one recording, one cut, one thing changed, and the
+predicates — *judges* — that decide pass or fail. Cases live in `*.bench.ts`
+files next to the code they guard, and `fluvia run` finds them, runs them and
+prints a table.
+
+A case file is TypeScript rather than a data format because the interesting
+questions about a dataflow do not fit a matcher vocabulary. Node strips the
+types on import, so there is no build step and no test framework:
+
+```ts
+// packages/toolbox-default/bench/replay.bench.ts — one of the three it exports
+import { defineBench, judges } from '@fluvia/core/bench/case'
+import type { World } from '@fluvia/core/bench/case'
+
+function recoveryNamesTheNewError(world: World): string | true {
+  const note = world.handles.find((handle) => handle.name === 'note11')
+  if (!note) return 'note11 was never bound'
+  if (note.state !== 'ready') return `note11 is ${note.state}: recover() did not run`
+  if (!note.summary?.includes('UnsupportedOptLevel')) return `note11 does not mention the new error: ${note.summary}`
+  return true
+}
+
+// A file exports one case, or an array of them, as `default` or as `cases`.
+export default defineBench({
+  name: 'demo · opt 7 is rejected and recovered from',
+  trace: '../traces/demo.jsonl.gz',
+  cut: { line: 9 },
+  subject: { edits: { 10: '@tuner compileKernel(kernel5, { opt: 7 })' } },
+  judge: [judges.failed('c9', 'UnsupportedOptLevel'), judges.outcomes({ diverged: 2, missing: 0 }), recoveryNamesTheNewError],
+})
+```
+
+That case edits one line of the recording to something the toolbox rejects, and
+then asserts the *whole* consequence: the compile fails with that specific
+error, exactly two calls diverge from the recording — the compile and the
+`recover()` downstream of its error handle — and the note that recovery produced
+names the new error rather than the recorded one. A judge returns `true`, or a
+string explaining the failure, or `{ pass, reason?, score? }`; the case passes
+when every judge does.
+
+**Cut.** `{ line: 9 }` by index, `{ notify: 'c7' }` for the line typed after a
+call's notification, or `{ turn: 3 }` for the first line a model turn submitted
+— which works on a pi-web `trace.json`, because only the conversation records
+which lines belonged to which turn. A recording is a `.jsonl`, a `.jsonl.gz` or
+a pi-web `trace.json`; the last is given the `session.start` header the browser
+runtime never wrote.
+
+**Subject.** Exactly one thing is different: `{ concurrency: 2 }`,
+`{ edits: { 10: '…' } }`, `{ call: { compileKernel: myImpl } }` to swap an
+implementation, or `{ takeover: { lane, driver } }` to hand one lane to a live
+agent while the others replay around it. Omit it for a plain replay.
+
+**Judges.** `outcomes({ same })`, `settled(fn, outcome)`, `handleReady(name)`,
+`order('unchanged' | 'changed')`, `failed(target, kind?)`, `count(state, n)` —
+and any function of the world (`{ report, calls, handles, events, trace }`).
+Cheap ones first; they all run either way, but the report reads in that order.
+
+**Horizon.** `'complete'` drains the slice. `{ reach: ['c9 done', 'digest9
+ready'] }` stops as soon as those hold, and fails the case if they never do —
+the lines it did not get to then count as `missing`, so judge what was reached
+rather than the whole slice.
+
+```sh
+npx fluvia run .                  # every *.bench.ts under the tree
+npx fluvia run . --filter preset  # only files or cases whose name contains it
+npx fluvia run . --json           # { cases, errors, summary }
+```
+
+```
+      case                                              subject                      same/div/miss  judges  wall
+────  ────────────────────────────────────────────────  ───────────────────────────  ─────────────  ──────  ────
+packages/cli/bench/takeover.bench.ts
+pass  demo · planner taken over by a scripted stand-in  takeover planner · scripted  10/0/0         2/2     75ms
+packages/toolbox-default/bench/preset.bench.ts
+pass  preset · the summary turn, replayed               replay                       1/0/0          5/5     16ms
+packages/toolbox-default/bench/replay.bench.ts
+pass  demo · replay from line 9                         replay                       16/0/0         2/2     39ms
+pass  demo · concurrency 2 reorders, outcomes hold      concurrency 2                16/0/0         2/2     32ms
+pass  demo · opt 7 is rejected and recovered from       edit 10                      14/2/0         3/3     41ms
+
+5 cases · 5 passed · 5 free (no model) · 0 model runs
+```
+
+`same/div/miss` counts the recorded calls of the slice: settled as recorded,
+settled differently, never made. Exit code is 1 when a case fails and 2 when a
+file could not be loaded — the other files still run, and the error names the
+one that did not.
+
+Five cases and no API key: the takeover one is driven by a scripted stand-in
+that reads acks and notifications the way an agent would, learns its handle
+names from the answers, and lets the `tuner` lane — whose recorded lines consume
+the planner's handles — replay against whatever it actually produced. A case
+whose driver does sample a model declares it (`takeover: { …, model }`), and the
+totals line separates the two so a suite can say what a run costs.
+
 ## The trace
 
 `--trace out/<session>.jsonl.gz` writes a gzip JSONL stream, one event per line,
@@ -210,9 +308,9 @@ so the perf report always has a readable transcript alongside the timings.
 | --- | --- |
 | `packages/core/` | **`@fluvia/core`** — the runtime, in Node and in the browser alike: `types.ts` (call, handle, notification, trace), `parser.ts` (one line → one call), `dispatch.ts` (the one path every line takes), `describe.ts` (values → type + summary), `trace.ts` (gzip JSONL writer and reader), `protocol.ts` (the wire types), `format.ts` (every string an agent reads), `session.ts` (the read–submit–answer loop) |
 | `packages/core/src/plugins/` | one cordis plugin per concern: `registry` (the functions an agent may call), `env` (handle bindings, shared by every agent in the runtime), `scheduler` (dependency resolution, concurrency, cancellation, skip cascade), `notify` (the hub), `notify-dsh` (the dsh handler), `inspect` (the control calls) |
-| `packages/core/src/bench/` | `fluvia bench`: trace slicing, the virtual clock, an in-memory runtime, and agent takeover |
-| `packages/cli/` | **`@fluvia/cli`** — the `fluvia` executable: `cli/` (the REPL and `--notify` wiring), `server/` (`fluvia serve`: the runtime on the far side of the boundary — wire protocol, per-connection identity, admission and limits), `client/` (`fluvia connect`: the thin, untrusted client and its REPL), `demo/` (drives the CLI as two agents over the NDJSON protocol), `perf/` (trace → model → self-contained HTML report, plus the local server), `dsh-inbox/` (a standalone receiving end of `dsh:http:<url>`), `bench/` (the slice commands and the demo page in `page/`), `preload.ts` (module specifier → registered functions) |
-| `packages/toolbox-default/` | **`@fluvia/toolbox-default`** — the toolbox loaded when `--preload` is not given: a deterministic GPU-kernel pipeline with realistic latencies and failures |
+| `packages/core/src/bench/` | `fluvia bench` and `fluvia run`: trace slicing (`slice`, `session`), the virtual clock, an in-memory runtime, agent takeover, and the case API (`case`: `defineBench`, `judges`, `runCase`; `load`: recordings in, sliceable traces out) |
+| `packages/cli/` | **`@fluvia/cli`** — the `fluvia` executable: `cli/` (the REPL and `--notify` wiring), `server/` (`fluvia serve`: the runtime on the far side of the boundary — wire protocol, per-connection identity, admission and limits), `client/` (`fluvia connect`: the thin, untrusted client and its REPL), `demo/` (drives the CLI as two agents over the NDJSON protocol), `perf/` (trace → model → self-contained HTML report, plus the local server), `dsh-inbox/` (a standalone receiving end of `dsh:http:<url>`), `bench/` (the slice commands and the demo page in `page/`), `run/` (`fluvia run`: case discovery, execution and the table), `preload.ts` (module specifier → registered functions) |
+| `packages/toolbox-default/` | **`@fluvia/toolbox-default`** — the toolbox loaded when `--preload` is not given: a deterministic GPU-kernel pipeline with realistic latencies and failures, plus the recordings it is benchmarked against (`traces/`) and the cases that read them (`bench/`) |
 | `packages/dsh-plugin-fluvia/` | the real dsh plugin: receives the same envelopes inside a dsh process and delivers them into an agent turn, so they land in the dsh Web UI ([docs/dsh-ui.md](docs/dsh-ui.md)) |
 | `packages/pi-web-fluvia/` | a pi agent driving `@fluvia/core` entirely in the browser: a live in-page runtime, or a benchmark slice resumed from a recording |
 | `skills/fluvia/` | the agent-facing skill |

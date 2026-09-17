@@ -78,6 +78,14 @@
       "types": "./lib/bench/runtime.d.ts",
       "default": "./lib/bench/runtime.js"
     },
+    "./bench/case": {
+      "types": "./lib/bench/case.d.ts",
+      "default": "./lib/bench/case.js"
+    },
+    "./bench/load": {
+      "types": "./lib/bench/load.d.ts",
+      "default": "./lib/bench/load.js"
+    },
     "./bench/slice": {
       "types": "./lib/bench/slice.d.ts",
       "default": "./lib/bench/slice.js"
