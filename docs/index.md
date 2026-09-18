@@ -3,8 +3,8 @@ layout: home
 
 hero:
   name: fluvia
-  text: Record an agent run once.
-  tagline: Cut it anywhere. Swap one piece. Score the difference. No tokens are spent until you ask for them.
+  text: An asynchronous dataflow runtime for LLM agents
+  tagline: Sessions are recorded. A recording can be cut at any line, replayed on a virtual clock with one thing changed, and scored. Replays run without a model.
   image:
     src: /logo.svg
     alt: fluvia
@@ -12,6 +12,9 @@ hero:
     - theme: brand
       text: Get started
       link: /guide/getting-started
+    - theme: alt
+      text: Demo
+      link: https://myriad-dreamin.github.io/fluvia/
     - theme: alt
       text: GitHub
       link: https://github.com/Myriad-Dreamin/fluvia

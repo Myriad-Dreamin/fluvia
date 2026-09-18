@@ -1,11 +1,13 @@
-name: Docs
+name: Pages
 
 on:
   push:
     branches: [main]
     paths:
       - 'docs/**'
-      - '.github/workflows/docs.yml'
+      - 'packages/**'
+      - 'scripts/build-site.sh'
+      - '.github/workflows/pages.yml'
       - 'package.json'
       - 'pnpm-lock.yaml'
       - 'pnpm-workspace.yaml'
@@ -30,10 +32,10 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm docs:build
+      - run: pnpm site:build
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: docs/.vitepress/dist
+          path: site
 
   deploy:
     needs: build

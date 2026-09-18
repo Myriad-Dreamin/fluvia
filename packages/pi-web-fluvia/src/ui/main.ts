@@ -536,6 +536,9 @@ function draw(): void {
             )}
           </nav>
           <span class="grow"></span>
+          <a class="btn ghost" href=${new URL('slice/', document.baseURI).href}>Slice bench</a>
+          <a class="btn ghost" href=${new URL('docs/', document.baseURI).href}>Docs</a>
+          <a class="btn ghost" href="https://github.com/Myriad-Dreamin/fluvia">GitHub</a>
           <button class="btn ghost" @click=${() => SettingsDialog.open([new ProvidersModelsTab(), new ProxyTab()])}>Settings</button>
         </header>
         <div class="body">

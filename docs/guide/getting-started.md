@@ -106,7 +106,7 @@ site is built from this same checkout:
 
 ```sh
 pnpm docs:dev      # local preview with hot reload
-pnpm docs:build    # static site into docs/.vitepress/dist
+pnpm docs:build    # static site into docs/.vitepress/dist; pnpm site:build assembles demo + docs into site/
 pnpm docs:preview  # serve what docs:build produced
 ```
 

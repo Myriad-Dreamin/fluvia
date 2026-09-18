@@ -27,7 +27,8 @@
     "test:boundary": "pnpm --filter @fluvia/cli test:boundary",
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
-    "docs:preview": "vitepress preview docs"
+    "docs:preview": "vitepress preview docs",
+    "site:build": "bash scripts/build-site.sh"
   },
   "devDependencies": {
     "@fluvia/cli": "workspace:^",

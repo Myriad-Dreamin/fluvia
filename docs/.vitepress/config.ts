@@ -9,16 +9,17 @@ import { defineConfig } from 'vitepress'
 export default defineConfig({
   title: 'fluvia',
   description: 'Record an agent run once. Cut it anywhere. Swap one piece. Score the difference.',
-  base: '/fluvia/',
+  base: '/fluvia/docs/',
   lang: 'en-US',
   cleanUrls: true,
   lastUpdated: true,
   appearance: 'dark',
-  head: [['link', { rel: 'icon', type: 'image/svg+xml', href: '/fluvia/favicon.svg' }]],
+  head: [['link', { rel: 'icon', type: 'image/svg+xml', href: '/fluvia/docs/favicon.svg' }]],
   themeConfig: {
     logo: '/logo.svg',
     search: { provider: 'local' },
     nav: [
+      { text: 'Demo', link: 'https://myriad-dreamin.github.io/fluvia/' },
       { text: 'Guide', link: '/guide/getting-started', activeMatch: '/guide/' },
       { text: 'Reference', link: '/reference/cli', activeMatch: '/reference/' },
       { text: 'GitHub', link: 'https://github.com/Myriad-Dreamin/fluvia' },

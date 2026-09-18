@@ -4,7 +4,7 @@
 .tabs { display: flex; gap: 0.25rem; }
 .tab, .btn { font: inherit; font-size: 0.875rem; padding: 0.3rem 0.75rem; border-radius: calc(var(--radius, 0.5rem) - 2px); border: 1px solid var(--border); background: var(--background); color: var(--foreground); cursor: pointer; }
 .tab.on, .btn.primary { background: var(--primary); color: var(--primary-foreground); border-color: var(--primary); }
-.btn.ghost { border-color: transparent; }
+.btn.ghost { border-color: transparent; text-decoration: none; display: inline-flex; align-items: center; }
 .tab:hover:not(.on), .btn:hover:not(.primary):not(:disabled) { background: var(--accent); }
 .btn:disabled { opacity: 0.5; cursor: default; }
 .body { flex: 1; display: flex; min-height: 0; }
