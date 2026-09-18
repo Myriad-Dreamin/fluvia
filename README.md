@@ -10,10 +10,11 @@ harness built on its recordings. The agent submits calls one line at a time
 and never waits for results. Every session is recorded, can be cut at any
 point, replayed on a virtual clock with one thing changed, and scored.
 
-[Documentation](https://myriad-dreamin.github.io/fluvia/) ·
-[Getting started](https://myriad-dreamin.github.io/fluvia/guide/getting-started) ·
-[Writing cases](https://myriad-dreamin.github.io/fluvia/guide/cases) ·
-[CLI reference](https://myriad-dreamin.github.io/fluvia/reference/cli)
+[Demo](https://myriad-dreamin.github.io/fluvia/) ·
+[Documentation](https://myriad-dreamin.github.io/fluvia/docs/) ·
+[Getting started](https://myriad-dreamin.github.io/fluvia/docs/guide/getting-started) ·
+[Writing cases](https://myriad-dreamin.github.io/fluvia/docs/guide/cases) ·
+[CLI reference](https://myriad-dreamin.github.io/fluvia/docs/reference/cli)
 
 ## Install
 

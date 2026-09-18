@@ -4,3 +4,4 @@ out/
 
 docs/.vitepress/dist/
 docs/.vitepress/cache/
+site/

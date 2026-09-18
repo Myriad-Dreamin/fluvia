@@ -39,6 +39,9 @@ export async function main(argv: string[]): Promise<void> {
     options: {
       trace: { type: 'string', default: resolve(cwd, 'out/s-20260915-223018.jsonl.gz') },
       out: { type: 'string', default: resolve(cwd, 'out/bench-page/index.html') },
+      // A complete document for static hosting; the default is the head-less
+      // fragment an artifact publisher wraps in its own skeleton.
+      standalone: { type: 'boolean', default: false },
     },
   })
 
@@ -82,7 +85,7 @@ export async function main(argv: string[]): Promise<void> {
   const script = result.outputFiles[0]!.text.replace(/<\/script/gi, '<\\/script')
   const css = readFileSync(resolve(here, 'styles.css'), 'utf8')
 
-  const html = `<title>Fluvia Slice Bench</title>
+  const body = `<title>Fluvia Slice Bench</title>
 <meta name="description" content="Cut a recorded fluvia session and continue it with an agent or a mechanical replay.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -93,6 +96,9 @@ export async function main(argv: string[]): Promise<void> {
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
 <script>${script}</script>
 `
+  const html = values.standalone
+    ? `<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n${body.replace('<div id="root"></div>', '</head>\n<body>\n<div id="root"></div>')}</body>\n</html>\n`
+    : body
   mkdirSync(dirname(values.out!), { recursive: true })
   writeFileSync(values.out!, html)
   process.stdout.write(`${values.out} · ${(Buffer.byteLength(html) / 1024).toFixed(0)} KiB · ${events.length} trace events\n`)
