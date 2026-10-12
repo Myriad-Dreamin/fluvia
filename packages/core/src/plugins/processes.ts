@@ -120,8 +120,13 @@ export class ProcessSupervisor extends Service {
           stderr,
         }
         const startedAt = this.tracer.now()
+        const timers: NodeJS.Timeout[] = []
         const exited = new Promise<void>((done) => {
           child.once('close', (code, signal) => {
+            // A deadline that has not fired yet is no longer a deadline; the
+            // exit is the answer. Leaving a timer armed would trace a kill for
+            // a process that is already gone, and could signal a reused pid.
+            for (const timer of timers) clearTimeout(timer)
             this.live.delete(id)
             this.reportExit(call, info, startedAt, code, signal)
             done()
@@ -137,6 +142,34 @@ export class ProcessSupervisor extends Service {
           stdout,
           stderr,
         })
+        // The deadline: two thresholds, each traced when it actually signals
+        // (a child already gone answers `false`, so no phantom kill is left).
+        // `unref` keeps a pending deadline from holding the runtime open.
+        const deadline = request.deadline
+        if (deadline !== undefined) {
+          const thresholds: Array<[NodeJS.Signals, number]> = [
+            ['SIGTERM', deadline.terminateAfterMs],
+            ['SIGKILL', deadline.killAfterMs],
+          ]
+          for (const [signal, afterMs] of thresholds) {
+            const timer = setTimeout(() => {
+              void this.signalDeadline(id, signal).then((signalled) => {
+                if (signalled) {
+                  this.tracer.emit('process.kill', {
+                    id,
+                    call: call.id,
+                    pid,
+                    pgid: info.pgid,
+                    signal,
+                    afterMs,
+                  })
+                }
+              })
+            }, afterMs)
+            timer.unref()
+            timers.push(timer)
+          }
+        }
         resolve(info)
       })
     })
@@ -192,8 +225,22 @@ export class ProcessSupervisor extends Service {
 
     const members = groupMembers(pgid)
     if (members.length === 0) return entry.child.kill(signal)
+    return this.walkGroup(pgid, signal, graceMs)
+  }
 
-    // Depth inside the group: how many of its own ancestors are members.
+  /**
+   * One leaf-first walk of a process group.
+   *
+   * Depth inside the group is how many of its own ancestors are members; each
+   * layer is signalled deepest-first and given time to die before the layer
+   * above it is signalled, so a parent can still collect its own child.
+   * Signalling the group as a whole (`kill(-pgid)`) cannot do that, and a child
+   * that dies after its parent is orphaned — a zombie nobody can collect in a
+   * container whose PID 1 does not reap.
+   */
+  private async walkGroup(pgid: number, signal: NodeJS.Signals, graceMs: number): Promise<boolean> {
+    const members = groupMembers(pgid)
+    if (members.length === 0) return false
     const byPid = new Map(members.map((member) => [member.pid, member]))
     const depthOf = (member: GroupMember): number => {
       let depth = 0
@@ -228,6 +275,33 @@ export class ProcessSupervisor extends Service {
         if (layer.every((member) => !exists(member.pid))) break
         await new Promise((resolve) => setTimeout(resolve, 10))
       }
+    }
+    return signalled
+  }
+
+  /**
+   * Deliver one deadline signal to a supervised child. A detached child leads
+   * its own group, so the whole group is ended — a program that forked is
+   * covered; otherwise the group is this runtime's own and only the child is
+   * signalled. Answers whether a signal went out, so a child that is already
+   * gone leaves no phantom `process.kill` in the trace.
+   */
+  private async signalDeadline(id: string, signal: NodeJS.Signals): Promise<boolean> {
+    const entry = this.live.get(id)
+    if (entry === undefined) return false
+    const { pid, pgid } = entry.info
+    if (pgid !== pid) return entry.child.kill(signal)
+    if (signal !== 'SIGKILL') return this.killGroup(id, signal)
+    // `SIGKILL` cannot be ignored, so the only member that can outlive one walk
+    // is one forked *during* it — a program that notices its child die and
+    // starts another. The leader is gone after the first walk, so the group
+    // stops growing: walk again until nothing is left, bounded, so a member
+    // that somehow keeps appearing cannot spin this forever.
+    let signalled = false
+    for (let pass = 0; pass < 4; pass++) {
+      if (groupMembers(pgid).length === 0) break
+      if (await this.walkGroup(pgid, 'SIGKILL', 50)) signalled = true
+      await new Promise((resolve) => setTimeout(resolve, 20))
     }
     return signalled
   }

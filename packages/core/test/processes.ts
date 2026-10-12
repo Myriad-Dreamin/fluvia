@@ -105,5 +105,53 @@ const silent = await processes.spawn(call, { command: 'sleep', args: ['30'] })
 assert.equal(processes.write(silent.id, 'x'), false, 'no pipe, no write')
 processes.killAll()
 
+// 5. A deadline is the net under a call that may leave something running: the
+//    first threshold asks with SIGTERM, the second insists with SIGKILL, and
+//    both firings are in the trace, so "ended by its deadline" is auditable.
+const polite = await processes.spawn(call, {
+  command: 'sleep',
+  args: ['30'],
+  detached: true,
+  deadline: { terminateAfterMs: 150, killAfterMs: 600 },
+})
+await sleep(400)
+const term = tracer.events.find((e) => e['k'] === 'process.kill' && e['id'] === polite.id)
+assert.ok(term, 'the first threshold is traced')
+assert.equal(term['signal'], 'SIGTERM')
+assert.equal(term['afterMs'], 150)
+assert.equal(term['pgid'], polite.pgid)
+assert.deepEqual(groupPids(polite.pgid), [], 'a child that takes the SIGTERM is gone')
+assert.ok(
+  !tracer.events.some((e) => e['k'] === 'process.kill' && e['id'] === polite.id && e['signal'] === 'SIGKILL'),
+  'and is not also SIGKILLed',
+)
+
+// A program that traps SIGTERM outlives the first threshold; the second is what
+// ends it — and it ends the whole group the program led.
+const stubborn = await processes.spawn(call, {
+  command: 'sh',
+  args: ['-c', 'trap "" TERM; while :; do sleep 1; done'],
+  detached: true,
+  deadline: { terminateAfterMs: 150, killAfterMs: 500 },
+})
+await sleep(900)
+const insisted = tracer.events.find(
+  (e) => e['k'] === 'process.kill' && e['id'] === stubborn.id && e['signal'] === 'SIGKILL',
+)
+assert.ok(insisted, 'a child that traps SIGTERM meets the second threshold')
+assert.equal(insisted['afterMs'], 500)
+assert.deepEqual(groupPids(stubborn.pgid), [], 'and the whole group it led is gone')
+
+// A process that ended on its own leaves no kill behind.
+const quiet = await processes.spawn(call, {
+  command: 'true',
+  deadline: { terminateAfterMs: 100, killAfterMs: 200 },
+})
+await sleep(400)
+assert.ok(
+  !tracer.events.some((e) => e['k'] === 'process.kill' && e['id'] === quiet.id),
+  'a process that already exited is not killed by its deadline',
+)
+
 await processes.drain()
 console.log('processes: ok')

@@ -206,6 +206,25 @@ export interface SpawnRequest {
    * Default: `false`, the child shares the supervisor's group.
    */
   detached?: boolean
+  /**
+   * A watchdog for a child that must not outlive its call's usefulness — the
+   * net under a call that may leave something running. Two thresholds, both in
+   * milliseconds after the spawn: `terminateAfterMs` sends `SIGTERM` (the polite
+   * ask, which a program may trap and use to clean up), and `killAfterMs` sends
+   * `SIGKILL` to whatever is still alive. Each firing is traced as
+   * `process.kill`, so "ended by its deadline" is a fact in the trace rather
+   * than something a reader infers from a command text.
+   *
+   * A threshold ends *the group* when the child leads one (`detached`), so a
+   * program that forked is covered too; otherwise only the child is signalled,
+   * never the group this runtime itself runs in.
+   */
+  deadline?: {
+    /** Send `SIGTERM` this many ms after the spawn. */
+    terminateAfterMs: number
+    /** Send `SIGKILL` to anything still alive this many ms after the spawn. */
+    killAfterMs: number
+  }
 }
 
 /**
@@ -423,6 +442,7 @@ export type TraceEvent = TraceEventBase &
       }
     | { k: 'process.spawn'; id: string; call: string; pid: number; pgid: number; command: string; stdout: string; stderr: string }
     | { k: 'process.exit'; id: string; call: string; code: number | null; signal: string | null; runMs: number }
+    | { k: 'process.kill'; id: string; call: string; pid: number; pgid: number; signal: string; afterMs: number }
     | { k: 'notify.emit'; id: string; call: string; agent: string; outcome: CallOutcome; event?: Notification['event'] }
     | { k: 'notify.deliver'; id: string[]; sink: string; agent: string; latencyMs: number; bytes: number }
     | { k: 'session.end'; reason: string; stats: SessionStats }
