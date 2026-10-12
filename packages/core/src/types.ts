@@ -192,6 +192,20 @@ export interface SpawnRequest {
   args?: string[]
   /** Working directory; defaults to the runtime's. */
   cwd?: string
+  /**
+   * `'pipe'` gives the child a writable stdin, written to through
+   * {@link ProcessSupervisor.write}. Default: `'ignore'`, so a program that
+   * reads stdin sees EOF at once rather than holding its call open.
+   */
+  stdin?: 'pipe'
+  /**
+   * Start the child in **its own process group** (the child leads it, so
+   * `pgid === pid`). A group is what makes "everything this call started" a pid
+   * fact and what makes {@link ProcessSupervisor.killGroup} able to end the
+   * child *and* what it forked without signalling this runtime's own group.
+   * Default: `false`, the child shares the supervisor's group.
+   */
+  detached?: boolean
 }
 
 /**
@@ -206,6 +220,12 @@ export interface ProcessInfo extends TaggedValue {
   id: string
   /** OS process id. */
   pid: number
+  /**
+   * The process group the child runs in. It is the child's own when the spawn
+   * asked for `detached` (`pgid === pid`), otherwise the group the supervisor
+   * handed down; either way it is read from the kernel, not assumed.
+   */
+  pgid: number
   /** The call that spawned it. */
   call: string
   /** `command args…`, for display. */
@@ -221,6 +241,8 @@ export interface ProcessExit {
   /** Supervisor id, matching {@link ProcessInfo.id}. */
   id: string
   pid: number
+  /** The process group the exit belongs to; see {@link ProcessInfo.pgid}. */
+  pgid: number
   command: string
   /** Exit code, or `null` when a signal ended it. */
   code: number | null
@@ -399,7 +421,7 @@ export type TraceEvent = TraceEventBase &
         type?: string
         summary?: string
       }
-    | { k: 'process.spawn'; id: string; call: string; pid: number; command: string; stdout: string; stderr: string }
+    | { k: 'process.spawn'; id: string; call: string; pid: number; pgid: number; command: string; stdout: string; stderr: string }
     | { k: 'process.exit'; id: string; call: string; code: number | null; signal: string | null; runMs: number }
     | { k: 'notify.emit'; id: string; call: string; agent: string; outcome: CallOutcome; event?: Notification['event'] }
     | { k: 'notify.deliver'; id: string[]; sink: string; agent: string; latencyMs: number; bytes: number }
